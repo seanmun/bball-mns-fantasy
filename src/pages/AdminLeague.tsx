@@ -16,6 +16,9 @@ export function AdminLeague() {
   const [config, setConfig] = useState<LeagueConfig | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The aprons toggle: the engine treats zero thresholds as "off", so
+  // the switch only has to open the fields; Off zeroes them.
+  const [apronsOpen, setApronsOpen] = useState(false)
 
   useEffect(() => {
     if (currentLeague) {
@@ -402,30 +405,65 @@ export function AdminLeague() {
               setConfig({ ...config, cap: { ...config.cap, tradeDelta: Number(v) } })
             }
           />
-          <NumRow
-            label="First Apron (0 = disabled)"
-            value={config.cap.firstApron}
-            onChange={(v) =>
-              setConfig({ ...config, cap: { ...config.cap, firstApron: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Second Apron (0 = disabled)"
-            value={config.cap.secondApron}
-            onChange={(v) =>
-              setConfig({ ...config, cap: { ...config.cap, secondApron: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Penalty per $1M over second apron"
-            value={config.cap.penaltyRatePerM}
-            onChange={(v) =>
-              setConfig({
-                ...config,
-                cap: { ...config.cap, penaltyRatePerM: Number(v) },
-              })
-            }
-          />
+          <Row label="Use Aprons">
+            <Toggle
+              value={apronsOpen || config.cap.firstApron > 0 || config.cap.secondApron > 0}
+              onChange={(v) => {
+                setApronsOpen(v)
+                if (!v) {
+                  setConfig({
+                    ...config,
+                    cap: { ...config.cap, firstApron: 0, secondApron: 0, penaltyRatePerM: 0 },
+                    fees: { ...config.fees, firstApronFee: 0 },
+                  })
+                }
+              }}
+            />
+          </Row>
+          <p className="text-xs text-gray-500 -mt-1">
+            Cap dues book at the day&rsquo;s first tip from the roster each team carries in. The
+            first apron is a one-time fee for the season; the second-apron penalty only ever
+            rises. Off means the app never looks for either.
+          </p>
+          {apronsOpen || config.cap.firstApron > 0 || config.cap.secondApron > 0 ? (
+            <>
+              <NumRow
+                label="First Apron"
+                value={config.cap.firstApron}
+                onChange={(v) =>
+                  setConfig({ ...config, cap: { ...config.cap, firstApron: Number(v) } })
+                }
+              />
+              <NumRow
+                label="First Apron Fee (one-time, dollars)"
+                value={config.fees.firstApronFee}
+                onChange={(v) =>
+                  setConfig({ ...config, fees: { ...config.fees, firstApronFee: Number(v) } })
+                }
+              />
+              <NumRow
+                label="Second Apron"
+                value={config.cap.secondApron}
+                onChange={(v) =>
+                  setConfig({ ...config, cap: { ...config.cap, secondApron: Number(v) } })
+                }
+              />
+              <NumRow
+                label="Penalty per $1M over second apron (dollars)"
+                value={config.cap.penaltyRatePerM}
+                onChange={(v) =>
+                  setConfig({ ...config, cap: { ...config.cap, penaltyRatePerM: Number(v) } })
+                }
+              />
+              {config.cap.firstApron > 0 &&
+              config.cap.secondApron > 0 &&
+              config.cap.secondApron < config.cap.firstApron ? (
+                <p className="text-xs -mt-1" style={{ color: 'var(--color-key, #ffb000)' }}>
+                  The second apron sits below the first — leagues normally set it higher.
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </Section>
 
         <Section title="Fees (dollars)">
@@ -434,16 +472,6 @@ export function AdminLeague() {
             value={config.fees.buyIn}
             onChange={(v) =>
               setConfig({ ...config, fees: { ...config.fees, buyIn: Number(v) } })
-            }
-          />
-          <NumRow
-            label="First Apron Fee"
-            value={config.fees.firstApronFee}
-            onChange={(v) =>
-              setConfig({
-                ...config,
-                fees: { ...config.fees, firstApronFee: Number(v) },
-              })
             }
           />
           <NumRow

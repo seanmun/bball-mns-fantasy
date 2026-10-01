@@ -20,7 +20,11 @@ import {
 import { seasonAverages } from '../../../src/lib/season/stats.js'
 import { sendWaiverResults } from '../../_notify.js'
 import { capUsed, rosterSpots } from '../../../src/lib/season/roster.js'
+import { clearFutureSlots } from '../../../src/lib/season/lineups.js'
 import { dayGames } from '../../../src/lib/season/statSources.js'
+import { lockReason, playerLocked, tipClock } from '../../../src/lib/season/locks.js'
+import { capNotice } from '../../../src/rules/capRules.js'
+import { teamExposures } from '../../../src/lib/season/capLock.js'
 import { easternToday } from '../../../src/lib/season/score.js'
 import { logger } from '../../_logger.js'
 
@@ -137,10 +141,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Pick at least one player to add.' })
       }
       const players = await db
-        .select({ id: mnsPlayers.id, teamId: mnsPlayers.teamId, slot: mnsPlayers.slot })
+        .select({
+          id: mnsPlayers.id,
+          name: mnsPlayers.name,
+          teamId: mnsPlayers.teamId,
+          slot: mnsPlayers.slot,
+          teamCode: mnsPlayers.teamCode,
+        })
         .from(mnsPlayers)
         .where(eq(mnsPlayers.leagueId, leagueId))
       const byId = new Map(players.map((p) => [p.id, p]))
+      // The tip-off lock: a player whose game has tipped stays on the
+      // team until tomorrow, so she cannot be the drop in an instant
+      // add. A queued claim clears in the morning, before any tip.
+      if (dropPlayerId) {
+        const dropRow = byId.get(dropPlayerId)
+        const game = dropRow?.teamCode ? (await dayGames(easternToday())).get(dropRow.teamCode) : undefined
+        if (dropRow && playerLocked(game)) {
+          return res.status(400).json({ error: lockReason(dropRow.name, game!) })
+        }
+      }
       const config = league.config as import('../../../src/types/leagueConfig.js').LeagueConfig
       const activeSize = config.roster?.activeSize ?? 10
       // IR doesn't occupy a spot — that's what the slots are FOR. A
@@ -176,7 +196,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const addId = addPlayerIds[0]
         if (config.cap?.enabled) {
           const rows = await db
-            .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, id: mnsPlayers.id })
+            .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, id: mnsPlayers.id, slot: mnsPlayers.slot })
             .from(mnsPlayers)
             .where(eq(mnsPlayers.leagueId, leagueId))
           const rosterSalary = capUsed(rows, mine.teamId)
@@ -207,16 +227,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (dropPlayerId) {
           const [droppedRow] = await db
             .update(mnsPlayers)
-            .set({ teamId: null, slot: 'active' })
+            .set({ teamId: null, slot: 'active', onIR: false, isInternationalStash: false, redshirtedAt: null })
             .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, dropPlayerId)))
             .returning({ name: mnsPlayers.name })
           droppedName = droppedRow?.name ?? dropPlayerId
+          await clearFutureSlots(db, leagueId, mine.teamId, dropPlayerId, easternToday())
         }
         await logTransaction(db, leagueId, 'add_drop', [mine.teamId], {
           added: took[0].name,
           ...(droppedName ? { dropped: droppedName } : {}),
         })
-        return res.status(200).json({ ok: true, instant: true, added: took[0].name })
+        // New salary on the books: say what it costs at first tip.
+        const ex = (await teamExposures(db, leagueId, league.seasonYear, config, [mine.teamId])).get(mine.teamId)
+        const notice = ex ? capNotice(ex.exposure, window.firstTip ? tipClock(window.firstTip) : null) : null
+        return res.status(200).json({ ok: true, instant: true, added: took[0].name, capNotice: notice })
       }
 
       // Append to the back of my queue for the clearing day.

@@ -16,6 +16,8 @@ import { pickBoard as sharedPickBoard } from '../../../src/lib/season/picks.js'
 import { logTransaction } from '../../../src/lib/season/waivers.js'
 import { sendTradeNote } from '../../_notify.js'
 import { capUsed, rosterSpots } from '../../../src/lib/season/roster.js'
+import { clearFutureSlots } from '../../../src/lib/season/lineups.js'
+import { easternToday } from '../../../src/lib/season/score.js'
 import { logger } from '../../_logger.js'
 import type { TradeAsset } from '../../../src/types/trade.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
@@ -350,7 +352,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Hard-cap check for both sides, same rule the waiver wire uses.
       if (config.cap?.enabled) {
         const all = await db
-          .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary })
+          .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
           .from(mnsPlayers)
           .where(eq(mnsPlayers.leagueId, leagueId))
         for (const teamId of involved) {
@@ -363,11 +365,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // A traded player keeps her slot and her history: a redshirt
+      // stays a redshirt (eligibility intact), IR stays IR. Only the
+      // team changes — and the old team's days-ahead snapshots forget
+      // her so nothing stale follows her back.
       for (const a of playerAssets) {
         await db
           .update(mnsPlayers)
-          .set({ teamId: a.toTeamId, slot: 'active' })
+          .set({ teamId: a.toTeamId })
           .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, a.id)))
+        await clearFutureSlots(db, leagueId, a.fromTeamId, a.id, easternToday())
       }
       for (const a of pickAssets) {
         // pick:<year>:r<round>:<originalTeamId> → materialize (or

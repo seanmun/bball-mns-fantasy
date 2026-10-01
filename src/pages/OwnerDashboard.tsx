@@ -2,7 +2,7 @@ import React, { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, EllipsisVertical, Settings, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, EllipsisVertical, Lock, Settings, X } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
 import { Button, Chip, EmptyState, PageHeader, Skeleton } from '../ui/components'
 import { useLeague } from '../contexts/LeagueContext'
@@ -12,6 +12,7 @@ import { PlayerCard, isFreshNews } from '../components/PlayerCard'
 import { StrategyDials } from '../components/StrategyDials'
 import { COUNTS_AGAINST_CAP, HOLDS_ROSTER_SPOT } from '../lib/season/roster'
 import { assignSlots } from '../lib/season/positions'
+import { playerLocked, tipClock } from '../lib/season/locks'
 
 interface OwnerInfo {
   userId: string | null
@@ -84,6 +85,15 @@ interface FeesPayload {
   roster: { used: number; size: number; redshirts: number; intStash: number; ir: number }
   lines: FeeLine[]
   total: number
+  // Cap dues: what the ledger has booked, and what will book at the
+  // next first tip unless the roster gets under.
+  dues?: {
+    firstApronFee: number
+    secondApronPenalty: number
+    pendingFirstApronFee: number
+    pendingSecondApronPenalty: number
+    booksAt: string | null
+  }
 }
 interface PendingClaim {
   id: string
@@ -133,12 +143,17 @@ function CapCard({
   capUsed,
   cap,
   fees,
+  dues,
 }: {
   capUsed: number
   cap: { floor: number; base: number; firstApron: number; secondApron: number; hardCap: number }
   fees: { firstApronFee: number; penaltyRatePerM: number }
+  dues: NonNullable<FeesPayload['dues']> | null
 }) {
   const pct = (v: number) => Math.min(100, (v / cap.hardCap) * 100)
+  const booked = (dues?.firstApronFee ?? 0) + (dues?.secondApronPenalty ?? 0)
+  const pending = (dues?.pendingFirstApronFee ?? 0) + (dues?.pendingSecondApronPenalty ?? 0)
+  const booksAt = dues?.booksAt ? tipClock(dues.booksAt) : null
   const thresholds = [
     { label: 'floor', value: cap.floor, color: 'var(--color-muted-foreground)' },
     { label: '1st apron', value: cap.firstApron, color: 'var(--color-key, #ffb000)' },
@@ -146,9 +161,6 @@ function CapCard({
     { label: 'hard cap', value: cap.hardCap, color: 'var(--color-pick-loss, #ff453a)' },
   ].filter((t) => t.value > 0)
   const overSecond = Math.max(0, capUsed - cap.secondApron)
-  const dues =
-    (capUsed > cap.firstApron ? fees.firstApronFee : 0) +
-    Math.ceil(overSecond / M) * fees.penaltyRatePerM
   return (
     <div className="mb-6 rounded-lg border border-[var(--color-border)] bg-mns-card p-4">
       <div className="flex items-baseline justify-between mb-2">
@@ -192,18 +204,31 @@ function CapCard({
         ))}
       </div>
       <p className="text-sm">
-        {capUsed > cap.secondApron ? (
+        {cap.secondApron > 0 && capUsed > cap.secondApron ? (
           <b className="text-[var(--color-pick-loss,#ff453a)]">
-            {fmtM(overSecond)} over the 2nd apron — dues at ${dues} (${fees.penaltyRatePerM}/M over)
+            {fmtM(overSecond)} over the 2nd apron (${fees.penaltyRatePerM}/M over)
           </b>
-        ) : capUsed > cap.firstApron ? (
-          <b style={{ color: '#ffb000' }}>Over the 1st apron — ${fees.firstApronFee} fee applies</b>
+        ) : cap.firstApron > 0 && capUsed > cap.firstApron ? (
+          <b style={{ color: 'var(--color-key, #ffb000)' }}>Over the 1st apron (${fees.firstApronFee} one-time fee)</b>
         ) : capUsed < cap.floor ? (
           <span className="text-[var(--color-muted-foreground)]">Below the floor ({fmtM(cap.floor)}).</span>
         ) : (
           <span className="text-[var(--color-accent)]">Under both aprons — no cap dues.</span>
         )}
       </p>
+      {/* Dues are booked at first tip from the roster carried in; until
+          then the number is a forecast the team can still change. */}
+      {pending > 0 ? (
+        <p className="mt-1 text-sm">
+          <b>${pending}</b> books {booksAt ? `at tonight's first tip (${booksAt} ET)` : 'at the next first tip'} unless
+          you get under.
+        </p>
+      ) : null}
+      {booked > 0 ? (
+        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+          Booked this season: ${booked} in cap dues.
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -298,7 +323,7 @@ export function OwnerDashboard() {
   ) => {
     setBusy(true)
     try {
-      await apiFetch(`/api/leagues/${leagueId}/roster`, {
+      const r = await apiFetch<{ capNotice?: string | null }>(`/api/leagues/${leagueId}/roster`, {
         method: 'POST',
         // Drops and redshirt moves are season acts, not daily lineup
         // moves — they carry no date.
@@ -313,6 +338,7 @@ export function OwnerDashboard() {
             : { playerId, slot, date: selDate }
         ),
       })
+      if (r?.capNotice) toast.warning(r.capNotice, { duration: 8000 })
       setOpenRow(null)
       setConfirmDrop(null)
       setConfirmRs(null)
@@ -368,6 +394,10 @@ export function OwnerDashboard() {
   // Crowned: the roster is a record to read, not a lineup to set.
   const offseason = currentLeague?.leaguePhase === 'champion'
   const editable = mine && !locked && !offseason
+  // Tonight's lock is per player: once her game tips she stays where
+  // she is until tomorrow. Future days never lock.
+  const gameOf = (p: RosterPlayer) => (day && p.teamCode ? day.games[p.teamCode] : undefined)
+  const rowLocked = (p: RosterPlayer) => isToday && playerLocked(gameOf(p))
 
   // The day's slot for each player — the daily lineup when loaded,
   // the base slot until then.
@@ -388,6 +418,14 @@ export function OwnerDashboard() {
     if (!day) return null
     const g = p.teamCode ? day.games[p.teamCode] : undefined
     const line = day.lines[p.id]
+    if (isToday && playerLocked(g) && !line) {
+      return (
+        <span className="text-[var(--color-muted-foreground)]">
+          <Lock aria-hidden className="inline w-3 h-3 mr-0.5 -mt-0.5" />
+          locked · tipped {tipClock(g!.tip)}
+        </span>
+      )
+    }
     if (line && (line.min > 0 || g?.state !== 'pre')) {
       return (
         <span className="text-[var(--color-accent)]">
@@ -454,7 +492,7 @@ export function OwnerDashboard() {
       <div className="min-w-0 lg:order-1">
       {currentLeague?.config.cap?.enabled ? (
         <CardCarousel pane={pane} onPane={setPane}>
-          <CapCard capUsed={capUsed} cap={currentLeague.config.cap} fees={currentLeague.config.fees} />
+          <CapCard capUsed={capUsed} cap={currentLeague.config.cap} fees={currentLeague.config.fees} dues={fees?.dues ?? null} />
           <FeesCard fees={fees} />
         </CardCarousel>
       ) : null}
@@ -754,7 +792,15 @@ export function OwnerDashboard() {
                                     {p.salary != null ? fmtM(p.salary) : '—'}
                                   </td>
                                 </tr>
-                                {editable && open ? (
+                                {editable && open && rowLocked(p) ? (
+                                  <tr className="border-b border-[var(--color-border)] last:border-b-0">
+                                    <td colSpan={13} className="px-2 py-2 text-sm text-[var(--color-muted-foreground)]">
+                                      <Lock aria-hidden className="inline w-4 h-4 mr-1 -mt-0.5" />
+                                      Locked — game tipped at {tipClock(gameOf(p)!.tip)} ET. Back in play tomorrow.
+                                    </td>
+                                  </tr>
+                                ) : null}
+                                {editable && open && !rowLocked(p) ? (
                                   <tr className="border-b border-[var(--color-border)] last:border-b-0">
                                     <td colSpan={13} className="px-2 py-1.5">
                                       <div className="flex flex-wrap gap-1.5 justify-start">
@@ -785,12 +831,12 @@ export function OwnerDashboard() {
                                             Start
                                           </Button>
                                         ) : null}
-                                        {slotKey !== 'bench' ? (
+                                        {slotKey !== 'bench' && slotKey !== 'redshirt' ? (
                                           <Button variant="quiet" onClick={() => moveSlot(p.id, 'bench')} disabled={busy}>
                                             Bench
                                           </Button>
                                         ) : null}
-                                        {slotKey !== 'ir' ? (
+                                        {slotKey !== 'ir' && slotKey !== 'redshirt' ? (
                                           <Button variant="quiet" onClick={() => moveSlot(p.id, 'ir')} disabled={busy}>
                                             IR
                                           </Button>
@@ -799,12 +845,23 @@ export function OwnerDashboard() {
                                         slotKey !== 'international' &&
                                         (p.presenceOverride ?? p.leaguePresence) !== 'rostered' &&
                                         !(ranges?.season?.[p.id]?.gp ?? 0) ? (
+                                          // Off a redshirt, a stash is still an exit: it costs
+                                          // the activation fee and spends the redshirt, so it
+                                          // goes through the same confirm.
                                           <Button
-                                            variant="quiet"
-                                            onClick={() => moveSlot(p.id, 'international')}
+                                            variant={slotKey === 'redshirt' && confirmRs === `${p.id}:stash` ? 'danger' : 'quiet'}
+                                            onClick={() =>
+                                              slotKey !== 'redshirt'
+                                                ? moveSlot(p.id, 'international')
+                                                : confirmRs === `${p.id}:stash`
+                                                  ? moveSlot(p.id, 'international')
+                                                  : setConfirmRs(`${p.id}:stash`)
+                                            }
                                             disabled={busy}
                                           >
-                                            Stash
+                                            {slotKey === 'redshirt' && confirmRs === `${p.id}:stash`
+                                              ? `Stash — $${currentLeague?.config.fees?.activationFee ?? 0} fee, redshirt spent`
+                                              : 'Stash'}
                                           </Button>
                                         ) : null}
                                         {currentLeague?.config.roster?.redshirtsAllowed &&
@@ -1058,6 +1115,7 @@ function TeamSettings({
               ['waivers', 'Waiver results — what cleared at 8am'],
               ['trades', 'Trade offers and answers'],
               ['lineup', 'Lineup warnings — OUT players before tip'],
+              ['fees', 'Fee receipts — cap dues when they book'],
             ] as const
           ).map(([k, label]) => {
             const on = prefs[k] !== false

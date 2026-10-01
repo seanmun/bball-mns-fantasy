@@ -1,4 +1,4 @@
-import { and, eq, lte, sql } from 'drizzle-orm'
+import { and, eq, gt, lte, sql } from 'drizzle-orm'
 import { mnsDailyLineups, mnsPlayers } from '../db/schema.js'
 import { easternToday } from './score.js'
 
@@ -12,7 +12,15 @@ import { easternToday } from './score.js'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
 
-export type Slot = 'active' | 'bench' | 'ir' | 'redshirt'
+export type Slot = 'active' | 'bench' | 'ir' | 'redshirt' | 'international'
+
+// Redshirt and the international stash are SEASON acts, not daily
+// lineup moves: no date, a fee or an eligibility check, and the
+// player's base slot is the truth. A daily snapshot never overrides a
+// parked player — that is how a redshirt silently came back to life
+// once a team had a snapshot on file.
+export const isParked = (slot: string | null | undefined): boolean =>
+  slot === 'redshirt' || slot === 'international'
 
 const DAY_MS = 24 * 3600 * 1000
 
@@ -55,18 +63,53 @@ export async function lineupResolver(db: Db, leagueId: string, throughDate: stri
     list.push(r) // already date-ascending
     byTeam.set(r.teamId, list)
   }
-  return (teamId: string, playerId: string, date: string, baseSlot: string | null): Slot => {
-    const list = byTeam.get(teamId)
-    if (list) {
-      for (let i = list.length - 1; i >= 0; i--) {
-        if (list[i].gameDate <= date) {
-          const s = list[i].slots[playerId]
-          return (s ?? baseSlot ?? 'active') as Slot
-        }
+  return (teamId: string, playerId: string, date: string, baseSlot: string | null): Slot =>
+    resolveFromRows(byTeam.get(teamId), playerId, date, baseSlot)
+}
+
+// The resolver's pure core: parked wins outright; otherwise the latest
+// snapshot at/before the date, then the base slot.
+export function resolveFromRows(
+  rows: Array<{ gameDate: string; slots: Record<string, string> }> | undefined,
+  playerId: string,
+  date: string,
+  baseSlot: string | null
+): Slot {
+  if (isParked(baseSlot)) return baseSlot as Slot
+  if (rows) {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].gameDate <= date) {
+        const s = rows[i].slots[playerId]
+        return (s ?? baseSlot ?? 'active') as Slot
       }
     }
-    return (baseSlot ?? 'active') as Slot
   }
+  return (baseSlot ?? 'active') as Slot
+}
+
+// Forget a player in every snapshot AFTER a date — on un-parking,
+// trading, or dropping, so a slot set days ahead cannot resurrect a
+// state the season act just ended.
+export async function clearFutureSlots(
+  db: Db,
+  leagueId: string,
+  teamId: string,
+  playerId: string,
+  afterDate: string
+): Promise<void> {
+  await db
+    .update(mnsDailyLineups)
+    .set({
+      slots: sql`${mnsDailyLineups.slots} - ${playerId}::text`,
+      activePlayerIds: sql`array_remove(${mnsDailyLineups.activePlayerIds}, ${playerId}::text)`,
+    })
+    .where(
+      and(
+        eq(mnsDailyLineups.leagueId, leagueId),
+        eq(mnsDailyLineups.teamId, teamId),
+        gt(mnsDailyLineups.gameDate, afterDate)
+      )
+    )
 }
 
 // One team's full effective lineup for one date, over its CURRENT
@@ -137,11 +180,11 @@ export async function applyLineupsForToday(db: Db, leagueId: string, now = new D
   }>
   let changed = 0
   for (const p of roster) {
-    // Redshirt is a season act with a fee attached — the daily
-    // rollover never activates one.
-    if (p.slot === 'redshirt') continue
+    // Parked players are season acts — the daily rollover never
+    // touches them.
+    if (isParked(p.slot)) continue
     const eff = resolve(p.teamId, p.id, today, p.slot)
-    if (eff === 'redshirt') continue
+    if (isParked(eff)) continue
     if (eff !== (p.slot ?? 'active')) {
       await db
         .update(mnsPlayers)

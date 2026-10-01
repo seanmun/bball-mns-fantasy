@@ -109,11 +109,12 @@ export function FreeAgents() {
     if (adds.length === 0) return
     setBusy(true)
     try {
-      await apiFetch(`/api/leagues/${leagueId}/waivers`, {
+      const r = await apiFetch<{ capNotice?: string | null }>(`/api/leagues/${leagueId}/waivers`, {
         method: 'POST',
         body: JSON.stringify({ addPlayerIds: adds, dropPlayerId: drop ?? undefined }),
       })
       toast.success(open ? 'Done — they\'re yours' : 'Claim queued — clears tomorrow morning')
+      if (r?.capNotice) toast.warning(r.capNotice, { duration: 8000 })
       setAdds([])
       setDrop(null)
       refresh()

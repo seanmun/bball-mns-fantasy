@@ -10,7 +10,8 @@ import { processWaivers } from '../../src/lib/season/waivers.js'
 import { applyLineupsForToday } from '../../src/lib/season/lineups.js'
 import { advancePlayoffs, maybeStartPlayoffs } from '../../src/lib/season/playoffs.js'
 import { faWindow } from '../../src/lib/season/waivers.js'
-import { sendLineupWarnings, sendWaiverResults } from '../_notify.js'
+import { sendFeeReceipts, sendLineupWarnings, sendWaiverResults } from '../_notify.js'
+import { bookCapDuesAtTip } from '../../src/lib/season/capLock.js'
 import { ensureFinalSnapshot } from '../../src/lib/season/finals.js'
 import { valueWallet } from '../_wallet.js'
 import type { LeagueConfig } from '../../src/types/leagueConfig.js'
@@ -88,13 +89,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // The lineup warning fires inside the last three hours before
       // first tip, once per day (notify_log holds the key).
+      const window = await faWindow(now)
       if (source === 'espn') {
-        const window = await faWindow(now)
         await sendLineupWarnings(
-          { id: league.id, name: league.name, seasonYear: league.seasonYear },
+          { id: league.id, name: league.name, seasonYear: league.seasonYear, config },
           window.firstTip,
           now
         )
+      }
+
+      // Cap dues book at first tip from the roster each team carried
+      // in — once per day, never undone. Receipts go out as they book.
+      const dues = await bookCapDuesAtTip(db, { id: league.id, seasonYear: league.seasonYear }, config, window.firstTip, now)
+      if (dues.booked.length > 0) {
+        await sendFeeReceipts({ id: league.id, name: league.name }, dues.booked)
       }
 
       // The injury report, full-refresh (sim leagues skip it — their
@@ -139,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         finalized,
         waiversGranted: waivers.granted,
         waiversFailed: waivers.failed,
+        duesBooked: dues.booked.length,
         injuriesUpdated: injuries.updated,
         playoffsStarted: started,
         playoffsAdvanced: playoff.advanced,

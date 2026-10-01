@@ -14,6 +14,10 @@ import { logger } from './_logger.js'
 import { easternToday, matchupWeekFor } from '../src/lib/season/score.js'
 import { dayGames } from '../src/lib/season/statSources.js'
 import type { WaiverOutcome } from '../src/lib/season/waivers.js'
+import type { LeagueConfig } from '../src/types/leagueConfig.js'
+import { capNotice } from '../src/rules/capRules.js'
+import { teamExposures, type DuesReceipt } from '../src/lib/season/capLock.js'
+import { tipClock } from '../src/lib/season/locks.js'
 
 // The league's voice in the inbox. Three transactional notes — waiver
 // results, trade offers, the lineup warning — each best-effort: a mail
@@ -25,7 +29,7 @@ const APP_URL = process.env.VITE_APP_URL || 'https://wnba.mnsfantasy.com'
 
 // Owners who haven't opted out of this KIND of email — a missing
 // pref key means on.
-async function ownersOf(teamIds: string[], kind: 'waivers' | 'trades' | 'lineup') {
+async function ownersOf(teamIds: string[], kind: 'waivers' | 'trades' | 'lineup' | 'fees') {
   if (teamIds.length === 0) return new Map<string, Array<{ email: string }>>()
   const rows = await db
     .select({
@@ -149,7 +153,7 @@ export async function sendTradeNote(
 // tip. The notify_log unique key is the idempotency; the tick calls
 // this freely every 20 minutes.
 export async function sendLineupWarnings(
-  league: { id: string; name: string; seasonYear: number },
+  league: { id: string; name: string; seasonYear: number; config: LeagueConfig },
   firstTip: string | null,
   now = new Date()
 ) {
@@ -198,48 +202,117 @@ export async function sendLineupWarnings(
         )
       )
     const flagged = players.filter((p) => p.teamCode && games.has(p.teamCode))
-    if (flagged.length === 0) return
-
     const byTeam = new Map<string, string[]>()
     for (const p of flagged) {
       byTeam.set(p.teamId!, [...(byTeam.get(p.teamId!) ?? []), p.name])
     }
+
+    // Cap exposure rides in the same note: what books at first tip
+    // unless the roster gets under. One email per team, never two.
+    const expo = await teamExposures(db, league.id, league.seasonYear, league.config, playing)
+    const tipClockStr = tipClock(firstTip)
+    const noticeFor = (teamId: string) => {
+      const ex = expo.get(teamId)?.exposure
+      return ex ? capNotice(ex, tipClockStr) : null
+    }
+    const teamIds = [...new Set([...byTeam.keys(), ...playing.filter((id) => noticeFor(id))])]
+    if (teamIds.length === 0) return
+
     const teams = await db.select().from(mnsTeams).where(eq(mnsTeams.leagueId, league.id))
     const teamName = new Map(teams.map((t) => [t.id, t.name]))
-    const owners = await ownersOf([...byTeam.keys()], 'lineup')
-    const tipClock = new Date(firstTip).toLocaleTimeString('en-US', {
-      timeZone: 'America/New_York',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    const messages = [...byTeam.entries()].flatMap(([teamId, names]) =>
-      (owners.get(teamId) ?? []).map((o) => ({
+    const owners = await ownersOf(teamIds, 'lineup')
+    const messages = teamIds.flatMap((teamId) => {
+      const names = byTeam.get(teamId) ?? []
+      const notice = noticeFor(teamId)
+      const outNote =
+        names.length > 0
+          ? emailNote(
+              `${names.map((n) => `<b style="color:#ff453a">${esc(n)}</b>`).join(', ')} ${
+                names.length === 1 ? 'is' : 'are'
+              } ruled OUT but still active for tonight. First tip is ${esc(tipClockStr)} ET — each player locks the moment their own game tips.`
+            )
+          : ''
+      const capNote = notice ? emailNote(esc(notice)) : ''
+      const subject =
+        names.length > 0
+          ? `${names.length === 1 ? `${names[0]} is` : `${names.length} of your starters are`} OUT tonight`
+          : `Cap dues book at first tip tonight — ${teamName.get(teamId) ?? league.name}`
+      return (owners.get(teamId) ?? []).map((o) => ({
         to: o.email,
-        subject: `${names.length === 1 ? `${names[0]} is` : `${names.length} of your starters are`} OUT tonight`,
+        subject,
         html: emailShell({
-          preheader: `First tip ${tipClock} ET — your lineup still starts ${names.join(', ')}.`,
-          heading: 'OUT players in tonight’s lineup',
+          preheader:
+            names.length > 0
+              ? `First tip ${tipClockStr} ET — your lineup still starts ${names.join(', ')}.`
+              : notice ?? '',
+          heading: names.length > 0 ? 'OUT players in tonight’s lineup' : 'Over the apron tonight',
           subheading: esc(teamName.get(teamId) ?? league.name),
-          bodyHtml: emailNote(
-            `${names.map((n) => `<b style="color:#ff453a">${esc(n)}</b>`).join(', ')} ${
-              names.length === 1 ? 'is' : 'are'
-            } ruled OUT but still active for tonight. First tip is ${esc(tipClock)} ET — after that, tonight is locked in.`
-          ),
-          ctaLabel: 'Fix my lineup',
+          bodyHtml: outNote + capNote,
+          ctaLabel: names.length > 0 ? 'Fix my lineup' : 'See my cap',
           ctaUrl: `${APP_URL}/league/${league.id}/my-team`,
           footerLine: prefsFootnote(league.id, `Sent because you own ${esc(teamName.get(teamId) ?? 'a team')} in ${esc(league.name)}.`),
         }),
         text: [
-          `OUT tonight but still in your active lineup: ${names.join(', ')}.`,
-          `First tip ${tipClock} ET.`,
+          names.length > 0 ? `OUT tonight but still in your active lineup: ${names.join(', ')}.` : '',
+          notice ?? '',
+          `First tip ${tipClockStr} ET.`,
           `${APP_URL}/league/${league.id}/my-team`,
-        ].join('\n'),
+        ]
+          .filter(Boolean)
+          .join('\n'),
       }))
-    )
+    })
     const r = await sendAll(messages)
     if (r.failed.length) logger.error('lineup warning emails failed', { leagueId: league.id, failed: r.failed })
   } catch (err) {
     logger.error('sendLineupWarnings failed', {
+      leagueId: league.id,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+// The receipt: cap dues just booked at first tip, with the running
+// total the commissioner will settle. Sent once, because the booking
+// itself happens once.
+export async function sendFeeReceipts(league: { id: string; name: string }, receipts: DuesReceipt[]) {
+  try {
+    if (receipts.length === 0) return
+    const teams = await db.select().from(mnsTeams).where(eq(mnsTeams.leagueId, league.id))
+    const teamName = new Map(teams.map((t) => [t.id, t.name]))
+    const owners = await ownersOf(
+      receipts.map((r) => r.teamId),
+      'fees'
+    )
+    const usd = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+    const messages = receipts.flatMap((r) => {
+      const booked = r.entries.reduce((n, e) => n + e.amount, 0)
+      const lines = r.entries.map((e) => `<b>${usd(e.amount)}</b> — ${esc(e.detail)}`).join('<br/>')
+      return (owners.get(r.teamId) ?? []).map((o) => ({
+        to: o.email,
+        subject: `Cap dues booked: ${usd(booked)} — ${teamName.get(r.teamId) ?? league.name}`,
+        html: emailShell({
+          preheader: `${usd(booked)} in cap dues booked at first tip. Season total ${usd(r.totalOwed)}.`,
+          heading: 'Cap dues booked',
+          subheading: esc(teamName.get(r.teamId) ?? league.name),
+          bodyHtml: emailNote(
+            `${lines}<br/><br/>Booked at tonight’s first tip from the roster you carried in. Your season total in league dues is now <b>${usd(r.totalOwed)}</b>. Tracked here, settled with the commissioner.`
+          ),
+          ctaLabel: 'See my fees',
+          ctaUrl: `${APP_URL}/league/${league.id}/my-team`,
+          footerLine: prefsFootnote(league.id, `Sent because you own ${esc(teamName.get(r.teamId) ?? 'a team')} in ${esc(league.name)}.`),
+        }),
+        text: [
+          ...r.entries.map((e) => `${usd(e.amount)} — ${e.detail}`),
+          `Season total in league dues: ${usd(r.totalOwed)}.`,
+          `${APP_URL}/league/${league.id}/my-team`,
+        ].join('\n'),
+      }))
+    })
+    const res = await sendAll(messages)
+    if (res.failed.length) logger.error('fee receipt emails failed', { leagueId: league.id, failed: res.failed })
+  } catch (err) {
+    logger.error('sendFeeReceipts failed', {
       leagueId: league.id,
       err: err instanceof Error ? err.message : String(err),
     })

@@ -7,6 +7,9 @@ import { capUsed, rosterSpots } from '../../../src/lib/season/roster.js'
 import { teamFees } from '../../../src/lib/season/fees.js'
 import { logger } from '../../_logger.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
+import { capExposure, penaltyRate } from '../../../src/rules/capRules.js'
+import { apronsConfigured } from '../../../src/lib/season/capLock.js'
+import { faWindow } from '../../../src/lib/season/waivers.js'
 
 // What a team owes the league, itemised — the legacy app's roster-and-
 // fees card. Two kinds of money meet here: flat dues and charges
@@ -52,9 +55,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       penaltyRatePerM: 0,
     }
 
-    const overSecond = cap ? Math.max(0, used - cap.secondApron) : 0
-    const secondApronPenalty = Math.ceil(overSecond / 1_000_000) * (f.penaltyRatePerM ?? 0)
-    const firstApronFee = cap && used > cap.firstApron ? f.firstApronFee ?? 0 : 0
+    // Cap dues are what the ledger BOOKED at first tip, never a live
+    // sum — and what will book next, as a forecast.
+    const firstApronFee = Number(ledger?.firstApronFee ?? 0)
+    const secondApronPenalty = Number(ledger?.secondApronPenalty ?? 0)
+    const exposure =
+      cap && apronsConfigured(config) ? capExposure(used, config, { firstApronFee, secondApronPenalty }) : null
+    const booksAt = exposure && exposure.pendingTotal > 0 ? (await faWindow()).firstTip : null
     const redshirtFees = Number(ledger?.redshirtFees ?? 0)
     const activationFees = Number(ledger?.unredshirtFees ?? 0)
     const franchiseTagFees = Number(ledger?.franchiseTagFees ?? 0)
@@ -82,11 +89,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         amount: activationFees,
         note: activationCount > 0 ? `$${f.activationFee} each` : null,
       },
-      { label: 'First apron fee', amount: firstApronFee, note: 'one-time' },
+      { label: 'First apron fee', amount: firstApronFee, note: 'one-time, booked at first tip' },
       {
         label: 'Second apron penalty',
         amount: secondApronPenalty,
-        note: overSecond > 0 ? `$${f.penaltyRatePerM} per $1M over` : null,
+        note: secondApronPenalty > 0 ? `$${penaltyRate(config)} per $1M over, booked at first tip` : null,
       },
     ].filter((l) => l.amount > 0)
 
@@ -103,6 +110,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       capUsed: used,
       lines,
       total: lines.reduce((n, l) => n + l.amount, 0),
+      dues: {
+        firstApronFee,
+        secondApronPenalty,
+        pendingFirstApronFee: exposure?.firstApronPending ?? 0,
+        pendingSecondApronPenalty: exposure?.secondApronPending ?? 0,
+        booksAt,
+      },
       ledger: (ledger?.feeTransactions ?? []) as Array<Record<string, unknown>>,
     })
   } catch (err) {

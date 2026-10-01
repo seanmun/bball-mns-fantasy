@@ -14,6 +14,30 @@
 export const HOLDS_ROSTER_SPOT = (slot: string | null | undefined): boolean =>
   slot !== 'ir' && slot !== 'redshirt' && slot !== 'international'
 
+export type MoveTarget = 'active' | 'bench' | 'ir' | 'redshirt' | 'international' | 'drop'
+
+const PARKED = (slot: string | null | undefined) => slot === 'redshirt' || slot === 'international'
+
+// What a move IS, judged from where the player stands and where she
+// is going — so every path (stash, redshirt, cross-moves between them,
+// a plain activation) pays what it owes and checks what it must.
+//   leavesRedshirt — activation fee, eligibility spent. Any exit but a drop.
+//   entersRedshirt — rookie eligibility + redshirt fee, from anywhere.
+//   entersStash    — stash eligibility, no fee.
+//   unparks        — salary returns to the cap: hard-cap check first.
+//   seasonAct      — carries no date; always today.
+export function moveShape(from: string | null | undefined, to: MoveTarget) {
+  const f = from ?? 'active'
+  return {
+    leavesRedshirt: f === 'redshirt' && to !== 'redshirt' && to !== 'drop',
+    entersRedshirt: to === 'redshirt' && f !== 'redshirt',
+    entersStash: to === 'international' && f !== 'international',
+    leavesStash: f === 'international' && to !== 'international' && to !== 'drop',
+    unparks: PARKED(f) && !PARKED(to) && to !== 'drop',
+    seasonAct: to === 'drop' || PARKED(f) || PARKED(to),
+  }
+}
+
 export const COUNTS_AGAINST_CAP = (slot: string | null | undefined): boolean =>
   slot !== 'redshirt' && slot !== 'international'
 

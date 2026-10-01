@@ -9,7 +9,7 @@ import { mnsTeamFees } from '../db/schema.js'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
 
-export type FeeKind = 'redshirt' | 'unredshirt' | 'franchise_tag'
+export type FeeKind = 'redshirt' | 'unredshirt' | 'franchise_tag' | 'first_apron' | 'second_apron'
 
 export interface FeeEntry {
   kind: FeeKind
@@ -23,7 +23,7 @@ export async function chargeFee(
   leagueId: string,
   teamId: string,
   seasonYear: number,
-  kind: FeeKind,
+  kind: 'redshirt' | 'unredshirt' | 'franchise_tag',
   amount: number,
   detail: string,
   now = new Date()
@@ -74,4 +74,66 @@ export async function teamFees(db: Db, leagueId: string, teamId: string, seasonY
     )
     .limit(1)
   return row ?? null
+}
+
+const fmtM = (n: number) => `$${(n / 1_000_000).toFixed(1)}M`
+
+// Cap dues, booked at first tip. The ledger holds the season's state
+// (first apron fee: 0 or charged; second apron: the watermark), and
+// each change appends a dated line for exactly the amount that moved.
+export async function bookApronDues(
+  db: Db,
+  leagueId: string,
+  teamId: string,
+  seasonYear: number,
+  next: { firstApronFee: number; secondApronPenalty: number },
+  current: { firstApronFee: number; secondApronPenalty: number },
+  capUsedNow: number,
+  now = new Date()
+): Promise<FeeEntry[]> {
+  const at = now.toISOString()
+  const entries: FeeEntry[] = []
+  const firstDelta = next.firstApronFee - current.firstApronFee
+  if (firstDelta > 0) {
+    entries.push({
+      kind: 'first_apron',
+      amount: firstDelta,
+      detail: `Over the first apron at first tip — ${fmtM(capUsedNow)} on the books`,
+      at,
+    })
+  }
+  const secondDelta = next.secondApronPenalty - current.secondApronPenalty
+  if (secondDelta > 0) {
+    entries.push({
+      kind: 'second_apron',
+      amount: secondDelta,
+      detail: `Second-apron penalty raised to $${next.secondApronPenalty} — ${fmtM(capUsedNow)} on the books`,
+      at,
+    })
+  }
+  if (entries.length === 0) return []
+  const total = entries.reduce((n, e) => n + e.amount, 0)
+  await db
+    .insert(mnsTeamFees)
+    .values({
+      id: `${leagueId}_${teamId}_${seasonYear}`,
+      leagueId,
+      teamId,
+      seasonYear,
+      firstApronFee: String(next.firstApronFee),
+      secondApronPenalty: String(next.secondApronPenalty),
+      totalFees: String(total),
+      feeTransactions: entries,
+    })
+    .onConflictDoUpdate({
+      target: [mnsTeamFees.leagueId, mnsTeamFees.teamId, mnsTeamFees.seasonYear],
+      set: {
+        firstApronFee: String(next.firstApronFee),
+        secondApronPenalty: String(next.secondApronPenalty),
+        totalFees: sql`${mnsTeamFees.totalFees} + ${total}`,
+        feeTransactions: sql`${mnsTeamFees.feeTransactions} || ${JSON.stringify(entries)}::jsonb`,
+        updatedAt: now,
+      },
+    })
+  return entries
 }

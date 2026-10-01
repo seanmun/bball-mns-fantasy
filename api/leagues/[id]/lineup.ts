@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       date,
       today,
       locked,
-      editable: !locked && mine?.teamId === teamId,
+      editable: !locked && mine?.teamId === teamId && league.leaguePhase !== 'champion',
       slots: Object.fromEntries(slots),
       games: Object.fromEntries(games),
       lines,

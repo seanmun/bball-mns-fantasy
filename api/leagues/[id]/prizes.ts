@@ -5,6 +5,8 @@ import { db } from '../../_db.js'
 import { mnsLeagues, mnsPortfolios, mnsTeams } from '../../../src/lib/db/schema.js'
 import { computeStandings } from '../../../src/lib/season/score.js'
 import { logger } from '../../_logger.js'
+import { valueWallet } from '../../_wallet.js'
+import { readFinalSnapshot } from '../../../src/lib/season/finals.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 
 // The prize pool, TRACKED never handled: cash the manager holds plus
@@ -24,6 +26,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!league) return res.status(404).json({ error: 'League not found' })
     const config = league.config as LeagueConfig
     const prizes = config.prizes ?? { potUsd: 0, walletAddress: null, splits: [] }
+
+    // Once the season is crowned the record is frozen: the pot as it
+    // stood at the flip and who won each place. No live valuation, no
+    // standings recompute — the number the commissioner pays out.
+    const final = await readFinalSnapshot(db, leagueId, league.seasonYear)
+    if (final) {
+      return res.status(200).json({
+        potUsd: final.pot.potUsd,
+        wallet: final.pot.walletAddress
+          ? {
+              address: final.pot.walletAddress,
+              ethBalance: null,
+              ethPrice: null,
+              usdValue: final.pot.walletUsd,
+              lastUpdated: final.finalizedAt,
+              error: null,
+            }
+          : null,
+        totalUsd: final.pot.totalUsd,
+        splits: final.splits.map((sp) => ({
+          label: sp.label,
+          share: sp.share,
+          amountUsd: sp.amountUsd,
+          holder: sp.name,
+        })),
+        configured: !!config.prizes,
+        isCommissioner: league.commissionerId === userId,
+        final: {
+          at: final.finalizedAt,
+          seasonYear: final.seasonYear,
+          champion: final.champion,
+          runnerUp: final.runnerUp,
+          places: final.places,
+        },
+      })
+    }
 
     // Wallet valuation, cache-first.
     let wallet: {
@@ -150,50 +188,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     return res.status(500).json({ error: 'Failed to load the prize pool' })
   }
-}
-
-async function valueWallet(address: string) {
-  const out = {
-    address,
-    ethBalance: null as number | null,
-    ethPrice: null as number | null,
-    usdValue: null as number | null,
-    lastUpdated: null as string | null,
-    error: null as string | null,
-  }
-  // Server-side name first; the VITE_ spelling is accepted so a key
-  // entered under the browser prefix still works, but the key never
-  // belongs in client code.
-  const key = process.env.ALCHEMY_API_KEY ?? process.env.VITE_ALCHEMY_API_KEY
-  if (!key) {
-    out.error = 'ALCHEMY_API_KEY is not set on this project yet.'
-    return out
-  }
-  try {
-    const bal = (await (
-      await fetch(`https://eth-mainnet.g.alchemy.com/v2/${key}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'eth_getBalance',
-          params: [address, 'latest'],
-        }),
-      })
-    ).json()) as { result?: string; error?: { message: string } }
-    if (bal.error || !bal.result) throw new Error(bal.error?.message ?? 'no balance result')
-    out.ethBalance = parseInt(bal.result, 16) / 1e18
-
-    const price = (await (
-      await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd')
-    ).json()) as { ethereum?: { usd?: number } }
-    if (!price.ethereum?.usd) throw new Error('no ETH price')
-    out.ethPrice = price.ethereum.usd
-    out.usdValue = out.ethBalance * out.ethPrice
-    out.lastUpdated = new Date().toISOString()
-  } catch (e) {
-    out.error = e instanceof Error ? e.message : 'wallet lookup failed'
-  }
-  return out
 }

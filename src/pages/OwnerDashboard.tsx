@@ -365,7 +365,9 @@ export function OwnerDashboard() {
   const maxDate = shiftDate(today, 13)
   const isToday = selDate === today
   const locked = day ? day.locked : selDate < today
-  const editable = mine && !locked
+  // Crowned: the roster is a record to read, not a lineup to set.
+  const offseason = currentLeague?.leaguePhase === 'champion'
+  const editable = mine && !locked && !offseason
 
   // The day's slot for each player — the daily lineup when loaded,
   // the base slot until then.
@@ -508,7 +510,7 @@ export function OwnerDashboard() {
         <div className="flex-1 text-center lg:hidden">
           <div className="font-bold">{fmtDay(selDate)}</div>
           <div className="text-xs text-[var(--color-muted-foreground)]">
-            {isToday ? 'Today' : locked ? 'Locked — this day is done' : 'Sets automatically on the day'}
+            {offseason ? 'Season complete — rosters reopen next season' : isToday ? 'Today' : locked ? 'Locked — this day is done' : 'Sets automatically on the day'}
           </div>
         </div>
         <div className="hidden lg:flex gap-1.5">
@@ -557,7 +559,7 @@ export function OwnerDashboard() {
         ) : null}
       </div>
       <p className="hidden lg:block -mt-2 mb-4 text-center text-xs text-[var(--color-muted-foreground)]">
-        {isToday ? 'Today' : locked ? 'Locked — this day is done' : 'Sets automatically on the day'}
+        {offseason ? 'Season complete — rosters reopen next season' : isToday ? 'Today' : locked ? 'Locked — this day is done' : 'Sets automatically on the day'}
       </p>
       <div className="mb-4 flex justify-end">
         <RangeChips value={range} onChange={setRange} hasLastSeason={!!ranges?.lastSeason} />

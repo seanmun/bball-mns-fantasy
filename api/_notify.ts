@@ -1,7 +1,8 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from './_db.js'
 import {
   mnsLeagues,
+  mnsMatchups,
   mnsNotifyLog,
   mnsPlayers,
   mnsTeamOwners,
@@ -10,7 +11,7 @@ import {
 import { esc, sendAll } from './_email.js'
 import { emailNote, emailShell } from './_emailTemplate.js'
 import { logger } from './_logger.js'
-import { easternToday } from '../src/lib/season/score.js'
+import { easternToday, matchupWeekFor } from '../src/lib/season/score.js'
 import { dayGames } from '../src/lib/season/statSources.js'
 import type { WaiverOutcome } from '../src/lib/season/waivers.js'
 
@@ -148,7 +149,7 @@ export async function sendTradeNote(
 // tip. The notify_log unique key is the idempotency; the tick calls
 // this freely every 20 minutes.
 export async function sendLineupWarnings(
-  league: { id: string; name: string },
+  league: { id: string; name: string; seasonYear: number },
   firstTip: string | null,
   now = new Date()
 ) {
@@ -166,6 +167,24 @@ export async function sendLineupWarnings(
       .returning()
     if (claimed.length === 0) return
 
+    // Only a team with a matchup THIS week has a lineup that matters.
+    // Outside the schedule there is nobody to warn; in the playoffs an
+    // eliminated team (or a bye) is left alone.
+    const week = await matchupWeekFor(db, league.id, today)
+    if (week == null) return
+    const live = await db
+      .select({ homeTeamId: mnsMatchups.homeTeamId, awayTeamId: mnsMatchups.awayTeamId })
+      .from(mnsMatchups)
+      .where(
+        and(
+          eq(mnsMatchups.leagueId, league.id),
+          eq(mnsMatchups.seasonYear, league.seasonYear),
+          eq(mnsMatchups.matchupWeek, week)
+        )
+      )
+    const playing = [...new Set(live.flatMap((m) => [m.homeTeamId, m.awayTeamId]))]
+    if (playing.length === 0) return
+
     const games = await dayGames(today)
     const players = await db
       .select()
@@ -174,7 +193,7 @@ export async function sendLineupWarnings(
         and(
           eq(mnsPlayers.leagueId, league.id),
           eq(mnsPlayers.slot, 'active'),
-          sql`${mnsPlayers.teamId} is not null`,
+          inArray(mnsPlayers.teamId, playing),
           eq(mnsPlayers.injuryStatus, 'Out')
         )
       )

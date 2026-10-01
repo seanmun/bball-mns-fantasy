@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import { useLeague } from '../contexts/LeagueContext'
-import { Trophy } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trophy } from 'lucide-react'
+import { Button } from '../ui/components'
 import { LEAGUE_PHASE_LABELS, LEAGUE_PHASE_ORDER, type LeaguePhase } from '../types/league'
 
 export function LeagueHome() {
@@ -155,6 +156,17 @@ export function LeagueHome() {
             <StandingsSection leagueId={league.id} myUserId={user?.id ?? null} />
           </div>
         </div>
+      ) : leaguePhase === 'champion' ? (
+        // The season is over. The record comes first — who won, who
+        // gets paid — then the final table, then every week's results
+        // to walk back through. Nothing on this screen is live.
+        <>
+          <SeasonResults leagueId={league.id} seasonYear={league.seasonYear} />
+          <div className="lg:grid lg:grid-cols-2 lg:gap-x-8 lg:items-start">
+            <StandingsSection leagueId={league.id} myUserId={user?.id ?? null} />
+            <WeekMatchups leagueId={league.id} myUserId={user?.id ?? null} browse />
+          </div>
+        </>
       ) : (
         <TeamsSection leagueId={league.id} isCommissioner={isCommissioner} myUserId={user?.id ?? null} />
       )}
@@ -162,9 +174,115 @@ export function LeagueHome() {
   )
 }
 
+interface FinalRecord {
+  at: string
+  seasonYear: number
+  champion: { teamId: string; name: string } | null
+  runnerUp: { teamId: string; name: string } | null
+  places: Array<{ place: number; teamId: string; name: string; via: string }>
+}
+interface PrizesSummary {
+  totalUsd: number
+  configured: boolean
+  splits: Array<{ label: string; share: number; amountUsd: number; holder: string | null }>
+  final?: FinalRecord
+}
+
+const usd = (n: number) =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: n >= 1000 ? 0 : 2 })
+
+// The season's record, frozen at the crown: champion, runner-up, and
+// what each paid place took home. Reads the same frozen snapshot the
+// Prizes tab shows, so the two never disagree.
+function SeasonResults({ leagueId, seasonYear }: { leagueId: string; seasonYear: number }) {
+  const { apiFetch } = useApi()
+  const [data, setData] = useState<PrizesSummary | null | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch<PrizesSummary>(`/api/leagues/${leagueId}/prizes`)
+      .then((d) => {
+        if (!cancelled) setData(d)
+      })
+      .catch(() => {
+        if (!cancelled) setData(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [apiFetch, leagueId])
+
+  if (data === undefined) return null
+  const final = data?.final
+  if (!final) {
+    // Crowned, record not written yet — the tick lands it within the
+    // hour. Say so rather than show a live number as if it were final.
+    return (
+      <section className="mb-8 rounded-lg border border-[var(--color-border)] bg-mns-card p-5">
+        <p className="text-[0.72rem] font-bold tracking-[0.14em] uppercase text-[var(--color-accent)] mb-1">
+          {seasonYear} season complete
+        </p>
+        <p className="text-[var(--color-muted-foreground)]">
+          The final record is being written. Check back shortly.
+        </p>
+      </section>
+    )
+  }
+  const finalDate = new Date(final.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  return (
+    <section className="mb-8 rounded-lg border border-[var(--color-accent)] bg-mns-card p-5">
+      <p className="text-[0.72rem] font-bold tracking-[0.14em] uppercase text-[var(--color-accent)] mb-2">
+        {final.seasonYear} season · Final
+      </p>
+      {final.champion ? (
+        <h2 className="text-2xl sm:text-3xl font-bold flex items-center gap-2 leading-tight">
+          <Trophy aria-hidden className="w-7 h-7 shrink-0 text-[var(--color-key,#ffb000)]" />
+          <span>
+            {final.champion.name}
+            <span className="block text-sm font-semibold text-[var(--color-muted-foreground)]">Champion</span>
+          </span>
+        </h2>
+      ) : null}
+      {final.runnerUp ? (
+        <p className="mt-2 text-lg">
+          <span className="text-[var(--color-muted-foreground)]">Runner-up</span>{' '}
+          <b>{final.runnerUp.name}</b>
+        </p>
+      ) : null}
+
+      {data?.configured && data.splits.length > 0 ? (
+        <ul className="mt-4 divide-y divide-[var(--color-border)] border-t border-[var(--color-border)]">
+          {data.splits.map((sp, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 py-2.5 tabular-nums">
+              <span className="min-w-0">
+                <b className="block truncate">{sp.holder ?? '—'}</b>
+                <span className="block text-sm text-[var(--color-muted-foreground)]">
+                  {sp.label} · {sp.share}%
+                </span>
+              </span>
+              <b className="shrink-0 text-lg">{usd(sp.amountUsd)}</b>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="mt-3 flex items-baseline justify-between gap-3 text-sm text-[var(--color-muted-foreground)]">
+        <span>
+          {data?.configured ? `Pot ${usd(data.totalUsd)} · ` : ''}final as of {finalDate}
+        </span>
+        <Link to={`/league/${leagueId}/prizes`} className="shrink-0 font-semibold text-[var(--color-accent)]">
+          Prizes →
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 interface WeekMatchup {
   id: string
   status: string
+  label?: string | null
   homeTeamId: string
   awayTeamId: string
   homeTeamName: string
@@ -173,15 +291,33 @@ interface WeekMatchup {
   awayScore: number
 }
 
-function WeekMatchups({ leagueId, myUserId }: { leagueId: string; myUserId: string | null }) {
+interface WeekPayload {
+  week: number | null
+  firstWeek?: number
+  totalWeeks?: number
+  matchups: WeekMatchup[]
+}
+
+// This week's matchups in season; with `browse`, any week's results
+// with arrows to walk the schedule — the offseason reading room.
+function WeekMatchups({
+  leagueId,
+  myUserId,
+  browse = false,
+}: {
+  leagueId: string
+  myUserId: string | null
+  browse?: boolean
+}) {
   const { apiFetch } = useApi()
-  const [data, setData] = useState<{ week: number | null; matchups: WeekMatchup[] } | null>(null)
+  const [week, setWeek] = useState<number | null>(null)
+  const [data, setData] = useState<WeekPayload | null>(null)
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      apiFetch<{ week: number | null; matchups: WeekMatchup[] }>(`/api/leagues/${leagueId}/matchups`),
+      apiFetch<WeekPayload>(`/api/leagues/${leagueId}/matchups${week != null ? `?week=${week}` : ''}`),
       apiFetch<Array<{ id: string; owners: Array<{ userId: string | null }> }>>(`/api/leagues/${leagueId}/teams`),
     ])
       .then(([d, teams]) => {
@@ -195,20 +331,50 @@ function WeekMatchups({ leagueId, myUserId }: { leagueId: string; myUserId: stri
     return () => {
       cancelled = true
     }
-  }, [apiFetch, leagueId, myUserId])
+  }, [apiFetch, leagueId, myUserId, week])
 
-  if (!data || data.matchups.length === 0) return null
+  if (!data || data.week == null) return null
+  if (!browse && data.matchups.length === 0) return null
   const isMine = (m: WeekMatchup) => m.homeTeamId === myTeamId || m.awayTeamId === myTeamId
   const sorted = [...data.matchups].sort((a, b) => Number(isMine(b)) - Number(isMine(a)))
+  const labels = new Set(data.matchups.map((m) => m.label).filter(Boolean))
+  const title = labels.size === 1 ? `${[...labels][0]} · week ${data.week}` : `Week ${data.week} matchups`
+  const first = data.firstWeek ?? 1
+  const last = data.totalWeeks ?? data.week
 
   return (
     <section className="mb-8">
-      <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-xl font-bold">Week {data.week} matchups</h2>
-        <Link to={`/league/${leagueId}/standings`} className="text-sm text-green-400 hover:text-green-300">
-          Standings →
-        </Link>
-      </div>
+      {browse ? (
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <Button
+            variant="quiet"
+            aria-label="Previous week"
+            disabled={data.week <= first}
+            onClick={() => setWeek(data.week! - 1)}
+          >
+            <ChevronLeft aria-hidden />
+          </Button>
+          <h2 className="text-xl font-bold text-center">{title}</h2>
+          <Button
+            variant="quiet"
+            aria-label="Next week"
+            disabled={data.week >= last}
+            onClick={() => setWeek(data.week! + 1)}
+          >
+            <ChevronRight aria-hidden />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-xl font-bold">{title}</h2>
+          <Link to={`/league/${leagueId}/standings`} className="text-sm text-green-400 hover:text-green-300">
+            Standings →
+          </Link>
+        </div>
+      )}
+      {browse && sorted.length === 0 ? (
+        <p className="text-sm text-[var(--color-muted-foreground)]">No matchups this week.</p>
+      ) : null}
       <ul className="grid gap-2 sm:grid-cols-2">
         {sorted.map((m, i) => (
           <li

@@ -128,6 +128,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!mine) return res.status(403).json({ error: "You don't own a team in this league." })
 
     if (req.method === 'POST') {
+      if (league.leaguePhase === 'champion') {
+        return res.status(400).json({ error: 'The season is complete — rosters reopen when the next season starts.' })
+      }
       const addPlayerIds = (req.body?.addPlayerIds ?? []) as string[]
       const dropPlayerId: string | null = req.body?.dropPlayerId ? String(req.body.dropPlayerId) : null
       if (!Array.isArray(addPlayerIds) || addPlayerIds.length === 0) {

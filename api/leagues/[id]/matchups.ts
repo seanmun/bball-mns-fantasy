@@ -171,6 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       week,
+      firstWeek: Math.min(...weeks.map((w) => w.matchupWeek)),
       totalWeeks: Math.max(...weeks.map((w) => w.matchupWeek)),
       matchups: matchups.map((m) => ({
         id: m.id,

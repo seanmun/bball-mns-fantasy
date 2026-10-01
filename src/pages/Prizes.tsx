@@ -21,6 +21,13 @@ interface PrizesPayload {
     gainPct?: number | null
   } | null
   splits: Array<{ label: string; share: number; amountUsd: number; holder: string | null }>
+  // Present once the season is crowned: the record is frozen.
+  final?: {
+    at: string
+    seasonYear: number
+    champion: { teamId: string; name: string } | null
+    runnerUp: { teamId: string; name: string } | null
+  }
 }
 
 const usd = (n: number) =>
@@ -61,12 +68,16 @@ export function Prizes() {
         back={`/league/${leagueId}`}
         backLabel="League home"
         title="Prizes"
-        status="The commissioner holds and pays the pot — this page keeps track."
+        status={
+          data.final
+            ? `Final — ${data.final.seasonYear} season, recorded ${new Date(data.final.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. The commissioner pays out from this record.`
+            : 'The commissioner holds and pays the pot — this page keeps track.'
+        }
       />
 
       <div className="mb-4 rounded-lg border border-[var(--color-border)] bg-mns-card p-5 text-center">
         <p className="text-[0.72rem] font-bold tracking-[0.14em] uppercase text-[var(--color-accent)] mb-1">
-          Prize pool
+          Prize pool{data.final ? ' · final' : ''}
         </p>
         <b className="block text-[2.6rem] leading-none tabular-nums">
           {data.configured ? usd(data.totalUsd) : '—'}
@@ -165,7 +176,8 @@ export function Prizes() {
                 </b>
               </div>
               <p className="text-sm text-[var(--color-muted-foreground)]">
-                {sp.share}% of the pot{sp.holder ? ` · currently ${sp.holder}` : ''}
+                {sp.share}% of the pot
+                {sp.holder ? (data.final ? ` · ${sp.holder}` : ` · currently ${sp.holder}`) : ''}
               </p>
             </li>
           ))}

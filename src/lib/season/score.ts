@@ -43,6 +43,17 @@ export function easternToday(now = new Date()): string {
   return ET_DAY.format(now)
 }
 
+const ET_HOUR = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: 'numeric',
+  hour12: false,
+})
+
+// 0-23 in Eastern time. Some engines print midnight as "24".
+export function easternHour(now = new Date()): number {
+  return Number(ET_HOUR.format(now)) % 24
+}
+
 // Score every matchup of one league week from the stat lines on file.
 // Idempotent: totals are recomputed from scratch each pass, so a
 // corrected box or a re-run always lands on the same answer. Rosters

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../_db.js'
 import { mnsLeagues } from '../../src/lib/db/schema.js'
 import { logger } from '../_logger.js'
@@ -11,6 +11,8 @@ import { applyLineupsForToday } from '../../src/lib/season/lineups.js'
 import { advancePlayoffs, maybeStartPlayoffs } from '../../src/lib/season/playoffs.js'
 import { faWindow } from '../../src/lib/season/waivers.js'
 import { sendLineupWarnings, sendWaiverResults } from '../_notify.js'
+import { ensureFinalSnapshot } from '../../src/lib/season/finals.js'
+import { valueWallet } from '../_wallet.js'
 import type { LeagueConfig } from '../../src/types/leagueConfig.js'
 
 // The season heartbeat, hourly. For every league in its regular season:
@@ -88,7 +90,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // first tip, once per day (notify_log holds the key).
       if (source === 'espn') {
         const window = await faWindow(now)
-        await sendLineupWarnings({ id: league.id, name: league.name }, window.firstTip, now)
+        await sendLineupWarnings(
+          { id: league.id, name: league.name, seasonYear: league.seasonYear },
+          window.firstTip,
+          now
+        )
       }
 
       // The injury report, full-refresh (sim leagues skip it — their
@@ -148,5 +154,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  return res.status(200).json({ ok: true, today, leagues: report })
+  // Season-end records. Every crowned league gets ONE frozen snapshot
+  // of the final places and the pot. Idempotent, so a league crowned
+  // on this very tick and a league whose flip missed its snapshot
+  // both land here.
+  const crowned = await db.select().from(mnsLeagues).where(eq(mnsLeagues.leaguePhase, 'champion'))
+  const finalsWritten: string[] = []
+  for (const league of crowned) {
+    try {
+      const r = await ensureFinalSnapshot(
+        db,
+        { id: league.id, seasonYear: league.seasonYear, config: league.config as LeagueConfig },
+        async (address) => (await valueWallet(address)).usdValue,
+        now
+      )
+      if (r.written) finalsWritten.push(league.name)
+    } catch (err) {
+      logger.error('season-tick: final snapshot failed', {
+        leagueId: league.id,
+        err: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return res.status(200).json({ ok: true, today, leagues: report, finalsWritten })
 }

@@ -58,6 +58,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const [league] = await db.select().from(mnsLeagues).where(eq(mnsLeagues.id, leagueId)).limit(1)
     if (!league) return res.status(404).json({ error: 'League not found' })
+    if (league.leaguePhase === 'champion') {
+      return res.status(400).json({ error: 'The season is complete — rosters reopen when the next season starts.' })
+    }
     const config = league.config as LeagueConfig
 
     const [mine] = await db

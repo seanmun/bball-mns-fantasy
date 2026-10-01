@@ -6,7 +6,7 @@ import {
   mnsPlayoffBrackets,
   mnsTeams,
 } from '../db/schema.js'
-import { computeStandings, easternToday } from './score.js'
+import { computeStandings, easternHour, easternToday } from './score.js'
 import type { LeagueConfig } from '../../types/leagueConfig.js'
 
 // The playoff engine. Regular season hands off automatically: once
@@ -66,6 +66,17 @@ export function roundLabel(teamsLeft: number): string {
 const shiftDate = (date: string, days: number) =>
   new Date(new Date(`${date}T12:00:00Z`).getTime() + days * 86400000).toISOString().slice(0, 10)
 
+// A week is SETTLED at noon Eastern on the day after its last date —
+// not at midnight. Late finals and the morning's stat corrections land
+// before noon, and a corrected box can flip a semifinal. Every phase
+// transition (season → playoffs, round → round, round → champion)
+// waits for this.
+export function weekSettled(endDate: string, now = new Date()): boolean {
+  const today = easternToday(now)
+  const dayAfter = shiftDate(endDate, 1)
+  return today > dayAfter || (today === dayAfter && easternHour(now) >= 12)
+}
+
 async function createRound(
   db: Db,
   league: { id: string; seasonYear: number },
@@ -123,7 +134,7 @@ export async function maybeStartPlayoffs(
     (max: string, w: { endDate: string }) => (w.endDate > max ? w.endDate : max),
     weeks[0].endDate
   )
-  if (easternToday(now) <= lastEnd) return false
+  if (!weekSettled(lastEnd, now)) return false
 
   const matchups = await db
     .select()
@@ -215,6 +226,19 @@ export async function advancePlayoffs(
   )
   if (current.some((m: { status: string }) => m.status !== 'final')) return { advanced: false }
 
+  const weekRows = await db
+    .select()
+    .from(mnsLeagueWeeks)
+    .where(
+      and(
+        eq(mnsLeagueWeeks.leagueId, league.id),
+        eq(mnsLeagueWeeks.matchupWeek, lastWeek),
+        eq(mnsLeagueWeeks.seasonYear, league.seasonYear)
+      )
+    )
+  const lastEnd = weekRows[0]?.endDate ?? easternToday(now)
+  if (!weekSettled(lastEnd, now)) return { advanced: false }
+
   // Bracket memory: who was seeded what.
   const [bracket] = await db
     .select()
@@ -253,18 +277,6 @@ export async function advancePlayoffs(
 
   const survivors = byesTo.length + winners.length
   if (survivors >= 2) {
-    const weekRows = await db
-      .select()
-      .from(mnsLeagueWeeks)
-      .where(
-      and(
-        eq(mnsLeagueWeeks.leagueId, league.id),
-        eq(mnsLeagueWeeks.matchupWeek, lastWeek),
-        eq(mnsLeagueWeeks.seasonYear, league.seasonYear)
-      )
-    )
-    const lastEnd = weekRows[0]?.endDate ?? easternToday(now)
-    if (easternToday(now) <= lastEnd) return { advanced: false }
     const pairings = nextRoundPairings(winners, byesTo)
     const start = shiftDate(lastEnd, 1)
     await createRound(

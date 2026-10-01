@@ -1,4 +1,4 @@
-# wnba-mns-fantasy
+# bball-mns-fantasy
 
 WNBA-only build of the Money Never Sleeps dynasty fantasy basketball platform, hosted at `wnba.mnsfantasy.com`.
 

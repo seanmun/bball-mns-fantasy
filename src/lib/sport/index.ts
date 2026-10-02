@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { SportAdapter } from './types'
 import { wnba } from './wnba.js'
 import type { Sport } from '../../types/leagueConfig'
@@ -29,13 +30,21 @@ export function sportFor(key: string | undefined): SportAdapter {
 }
 
 function readKey(): string | undefined {
-  // Node (API functions, drizzle-kit, vitest) reads the process env;
-  // the browser bundle gets import.meta.env inlined by Vite.
+  // Node (API functions, drizzle-kit, vitest) reads the process env.
   const fromProcess =
     typeof process !== 'undefined' && process.env ? process.env.VITE_SPORT : undefined
   if (fromProcess) return fromProcess
-  const meta = import.meta as unknown as { env?: Record<string, string | undefined> }
-  return meta.env?.VITE_SPORT
+  // The browser bundle: Vite inlines the value at build time ONLY for
+  // this exact spelling — no cast, no optional chaining, or the
+  // literal text survives into the bundle and reads undefined at
+  // runtime (that blanked the site on Oct 1 2026). Node never gets
+  // here with the var set; without it, import.meta.env is undefined
+  // and the catch hands back the loud error below.
+  try {
+    return import.meta.env.VITE_SPORT
+  } catch {
+    return undefined
+  }
 }
 
 export const sport: SportAdapter = sportFor(readKey())

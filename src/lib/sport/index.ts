@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import type { SportAdapter } from './types'
 import { wnba } from './wnba.js'
+import { nba } from './nba.js'
 import type { Sport } from '../../types/leagueConfig'
 
 // One codebase, deployed once per sport. VITE_SPORT on the Vercel
@@ -11,19 +12,13 @@ import type { Sport } from '../../types/leagueConfig'
 // clear error — rather than quietly serving one sport's schema under
 // the other sport's domain.
 
-const ADAPTERS: Record<Sport, SportAdapter> = {
-  wnba,
-  // nba lands with its own file; until then the key is refused below.
-  nba: undefined as unknown as SportAdapter,
-}
+const ADAPTERS: Record<Sport, SportAdapter> = { wnba, nba }
 
 export function sportFor(key: string | undefined): SportAdapter {
   const adapter = key ? ADAPTERS[key as Sport] : undefined
   if (!adapter) {
     throw new Error(
-      `VITE_SPORT must name a sport this build knows (${Object.keys(ADAPTERS)
-        .filter((k) => ADAPTERS[k as Sport])
-        .join(', ')}) — got ${JSON.stringify(key)}. Set it on the Vercel project and in .env.local.`
+      `VITE_SPORT must name a sport this build knows (${Object.keys(ADAPTERS).join(', ')}) — got ${JSON.stringify(key)}. Set it on the Vercel project and in .env.local.`
     )
   }
   return adapter

@@ -154,3 +154,18 @@ describe('buildFinalSnapshot', () => {
     expect(snap.places.map((p) => p.name)).toEqual(['Goggles', 'Veep', 'Kinetic'])
   })
 })
+
+describe('sport adapters', () => {
+  it('both sports resolve, with their own schema, feed path and ladder', async () => {
+    const { sportFor } = await import('../lib/sport/index')
+    const w = sportFor('wnba')
+    const n = sportFor('nba')
+    expect([w.schema, n.schema]).toEqual(['wnba', 'nba'])
+    expect([w.espn.league, n.espn.league]).toEqual(['basketball/wnba', 'basketball/nba'])
+    expect(w.presence({ jersey: null })).toBe('rights_only')
+    expect(n.presence({ jersey: null })).toBe('rostered')
+    expect(n.preset.cap).toMatchObject({ base: 208_000_000, firstApron: 208_000_000, secondApron: 240_000_000, hardCap: 272_000_000 })
+    expect(n.preset.roster.positionSlots?.reduce((s, p) => s + p.count, 0)).toBe(n.preset.roster.starterSize)
+    expect(() => sportFor('nhl')).toThrow(/wnba, nba/)
+  })
+})

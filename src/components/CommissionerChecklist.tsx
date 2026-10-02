@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -123,7 +124,7 @@ export function CommissionerChecklist({
           n={num()}
           done={false}
           title="Configure league rules"
-          description="Override cap, fees, schedule, scoring — anything from the WNBA preset."
+          description={`Override cap, fees, schedule, scoring — anything from the ${sport.leagueLabel} preset.`}
           cta="League settings"
           href={`/league/${leagueId}/lm/league`}
         />
@@ -401,8 +402,8 @@ function PopulatePoolStep({
         <div className="font-semibold text-white">Populate player pool</div>
         <p className="text-sm text-gray-400 mt-1">
           {done
-            ? `${count} WNBA players in this league's pool. Safe to re-run to refresh salaries.`
-            : 'Scrapes Her Hoop Stats for the full WNBA player pool with current salaries.'}
+            ? `${count} ${sport.leagueLabel} players in this league's pool. Safe to re-run to refresh salaries.`
+            : `Loads the full ${sport.leagueLabel} player pool with current salaries.`}
         </p>
       </div>
       <button

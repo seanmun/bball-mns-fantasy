@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { mnsPlayerStatLines, mnsPlayers } from '../db/schema.js'
+import { sport } from '../sport/index.js'
 
 // Two sources, one contract: given a league and an Eastern date, write
 // player_stat_lines rows. The scorer never knows which one ran.
@@ -128,7 +129,7 @@ export async function ingestSimDay(
 
 // ── ESPN ─────────────────────────────────────────────────────────────
 
-const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba'
+const ESPN = `https://site.api.espn.com/apis/site/v2/sports/${sport.espn.league}`
 
 function normName(s: string): string {
   return s
@@ -145,12 +146,9 @@ function pair(v: string): [number, number] {
   return m ? [Number(m[1]), Number(m[2])] : [0, 0]
 }
 
-// The pool's team codes came from the legacy mns port; ESPN spells a
-// few differently. ESPN's spelling -> ours.
-export const CODE_ALIAS: Record<string, string> = {
-  WSH: 'WAS', LA: 'LAS', PHX: 'PHO', LV: 'LVA', NY: 'NYL', GS: 'GSV',
-}
-export const ESPN_SCOREBOARD = `${'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba'}/scoreboard`
+// ESPN's team-code spelling -> ours, per sport.
+export const CODE_ALIAS: Record<string, string> = sport.espn.codeAlias
+export const ESPN_SCOREBOARD = `${ESPN}/scoreboard`
 
 export interface DayGame {
   opp: string
@@ -244,8 +242,10 @@ export async function ingestBios(
           age: a.age ?? null,
           yearsPro: a.experience?.years ?? null,
           position: a.position?.abbreviation ?? null,
-          // A player with no number is not physically with the team.
-          leaguePresence: a.jersey ? 'rostered' : 'rights_only',
+          // Where she actually is — the sport decides what the feed's
+          // shape means (a missing number means "never reported" in the
+          // WNBA and nothing at all in the NBA).
+          leaguePresence: sport.presence(a),
         })
       }
     } catch {

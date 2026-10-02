@@ -11,6 +11,8 @@
 // rules lived scattered as `slot !== 'ir'` and raw salary sums, which
 // is exactly how redshirt silently ate a roster spot and a cap hit.
 
+import { sport } from '../sport/index.js'
+
 export const HOLDS_ROSTER_SPOT = (slot: string | null | undefined): boolean =>
   slot !== 'ir' && slot !== 'redshirt' && slot !== 'international'
 
@@ -94,13 +96,13 @@ export function redshirtEligible(
   }
   if (!isRookieYear(player)) return { ok: false, reason: 'Only rookies can be redshirted.' }
   if (gamesPlayed > 0) {
-    return { ok: false, reason: 'She has already played — redshirt is for rookies who have not debuted.' }
+    return { ok: false, reason: 'This player has already played — redshirt is for rookies who have not debuted.' }
   }
   if (presenceOf(player) !== 'rostered') {
     return {
       ok: false,
       reason:
-        'She is not with a WNBA club — that is an international stash, not a redshirt. The commissioner can correct this if she really has reported.',
+        `This player is not with a ${sport.leagueLabel} club — that is an international stash, not a redshirt. The commissioner can correct this if they really have reported.`,
     }
   }
   return { ok: true }
@@ -114,13 +116,13 @@ export function intStashEligible(
 ): { ok: boolean; reason?: string } {
   if (player.slot === 'international') return { ok: false, reason: 'Already stashed.' }
   if (gamesPlayed > 0) {
-    return { ok: false, reason: 'She has played in the league this season — she cannot be stashed.' }
+    return { ok: false, reason: 'This player has played in the league this season and cannot be stashed.' }
   }
   if (presenceOf(player) === 'rostered') {
     return {
       ok: false,
       reason:
-        'She is on a WNBA roster — a stash is for players playing elsewhere. The commissioner can correct this if she is actually abroad.',
+        `This player is on a ${sport.leagueLabel} roster — a stash is for players playing elsewhere. The commissioner can correct this if they are actually abroad.`,
     }
   }
   return { ok: true }

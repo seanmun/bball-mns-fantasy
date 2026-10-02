@@ -1,56 +1,49 @@
 import type { Sport } from '../types/leagueConfig'
 
 // Sport-specific branding. Everything UI-facing that would change if
-// we forked this app for NBA lives here — components read from this
-// object, not from string literals scattered through the codebase.
-export const branding = {
+// this deployment played a different sport lives on the sport adapter
+// (src/lib/sport); components read from this object, never from string
+// literals scattered through the codebase.
+export interface Branding {
   identity: {
-    appName: 'MNS WNBA',
-    shortName: 'MNS WNBA',
-    longName: 'Money Never Sleeps WNBA',
-    tagline: 'Dynasty fantasy WNBA — every dollar counts',
-    sport: 'wnba' as Sport,
-    seasonLabel: '2026 WNBA',
-  },
-
+    appName: string
+    shortName: string
+    longName: string
+    tagline: string
+    sport: Sport
+    seasonLabel: string
+  }
   assets: {
-    logo: '/icons/mnsBall-icon.webp',
-    favicon: '/icons/mnsBall-icon.webp',
-    ogImage: '/icons/moneyneversleeps-icon.webp',
-    appleTouchIcon: '/icons/mnsBall-icon.webp',
-    heroVideoDesktop: '/video/left-ball.mp4',
-    heroVideoMobile: '/video/center-ball.mp4',
-    hinkieFolder: '/hinkie',
-    prizePoolFolder: '/prizePool',
-  },
-
+    logo: string
+    favicon: string
+    ogImage: string
+    appleTouchIcon: string
+    heroVideoDesktop: string
+    heroVideoMobile: string
+    hinkieFolder: string
+    prizePoolFolder: string
+  }
   colors: {
-    accent: '#22c55e',
-    accentLight: '#4ade80',
-    accentDark: '#16a34a',
-    background: '#0a0a0a',
-    card: '#121212',
-    hover: '#1a1a1a',
-    danger: '#ef4444',
-    warning: '#f59e0b',
-  },
-
+    accent: string
+    accentLight: string
+    accentDark: string
+    background: string
+    card: string
+    hover: string
+    danger: string
+    warning: string
+  }
   footer: {
-    copyright: '© 2026 Money Never Sleeps',
-    links: [
-      { label: 'About', href: '/about' },
-      { label: 'Roadmap', href: '/roadmap' },
-      { label: 'Changelog', href: '/changelog' },
-      { label: 'Media', href: '/media' },
-      { label: 'Privacy', href: '/privacy' },
-    ],
-  },
-
+    copyright: string
+    links: Array<{ label: string; href: string }>
+  }
   platform: {
-    parentUrl: 'https://mnsfantasy.com',
-    appUrl: 'https://wnba.mnsfantasy.com',
-    supportEmail: 'noreply@e.moneyneversleeps.app',
-  },
-} as const
+    parentUrl: string
+    appUrl: string
+    supportEmail: string
+  }
+}
 
-export type Branding = typeof branding
+export { sport as sportAdapter } from './sport/index'
+import { sport } from './sport/index'
+export const branding: Branding = sport.branding

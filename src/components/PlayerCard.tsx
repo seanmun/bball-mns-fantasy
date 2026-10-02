@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
@@ -100,7 +101,7 @@ export function PlayerCard({
 // as plain words; only the commissioner can change it, and the
 // override then drives redshirt vs stash eligibility.
 const PRESENCE_LABEL: Record<string, string> = {
-  rostered: 'With a WNBA club',
+  rostered: `With a ${sport.leagueLabel} club`,
   rights_only: 'Drafted, has not reported',
   absent: 'Not in the league — playing elsewhere',
 }

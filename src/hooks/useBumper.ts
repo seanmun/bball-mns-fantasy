@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { useState } from 'react'
 import { useAuth } from '@clerk/clerk-react'
 
@@ -39,7 +40,7 @@ export function useBumper(leagueId: string) {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ messages, context: { game: 'wnba', leagueId } }),
+      body: JSON.stringify({ messages, context: { game: sport.hub.chatGame, leagueId } }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error((body as { error?: string }).error ?? `Request failed (${res.status})`)

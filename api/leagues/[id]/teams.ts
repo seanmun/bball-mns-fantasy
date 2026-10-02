@@ -13,6 +13,7 @@ import { emailNote, emailShell } from '../../_emailTemplate.js'
 import { createTeamSchema, parseBody } from '../../_validation.js'
 import { pickBoard, type FuturePick } from '../../../src/lib/season/picks.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
+import { sport } from '../../../src/lib/sport/index.js'
 import { logger } from '../../_logger.js'
 import type { Team, TeamOwner } from '../../../src/types/team.js'
 
@@ -188,24 +189,24 @@ async function handlePatch(
           .from(mnsLeagues)
           .where(eq(mnsLeagues.id, leagueId))
           .limit(1)
-        const appUrl = process.env.VITE_APP_URL || 'https://wnba.mnsfantasy.com'
+        const appUrl = process.env.VITE_APP_URL || sport.appUrl
         const sent = await sendAll([
           {
             to: email,
-            subject: `You co-own ${team.name} — ${league?.name ?? 'MNS WNBA'}`,
+            subject: `You co-own ${team.name} — ${league?.name ?? sport.appName}`,
             html: emailShell({
               preheader: `You've been added as a co-owner of ${team.name}.`,
               heading: `You co-own ${esc(team.name)}`,
-              subheading: esc(league?.name ?? 'MNS WNBA dynasty'),
+              subheading: esc(league?.name ?? `${sport.appName} dynasty`),
               bodyHtml: emailNote(
                 `An owner added you to the team. Sign in — or create an account — with <b style="color:#f0f4f8">this email address</b> (${esc(email)}) and the team links to you automatically.`
               ),
               ctaLabel: 'Claim my team',
               ctaUrl: `${appUrl}/sign-up`,
-              footerLine: `Sent because an owner of ${esc(team.name)} added this address on wnba.mnsfantasy.com.`,
+              footerLine: `Sent because an owner of ${esc(team.name)} added this address on ${sport.appHost}.`,
             }),
             text: [
-              `You've been added as a co-owner of ${team.name} in ${league?.name ?? 'an MNS WNBA dynasty league'}.`,
+              `You've been added as a co-owner of ${team.name} in ${league?.name ?? `an ${sport.appName} dynasty league`}.`,
               '',
               `Sign in or create an account with this email address (${email}) and the team links to you automatically.`,
               `${appUrl}/sign-up`,
@@ -370,24 +371,24 @@ async function handlePost(
         .from(mnsLeagues)
         .where(eq(mnsLeagues.id, leagueId))
         .limit(1)
-      const appUrl = process.env.VITE_APP_URL || 'https://wnba.mnsfantasy.com'
+      const appUrl = process.env.VITE_APP_URL || sport.appUrl
       const sent = await sendAll(
         ownerEmails.map((email) => ({
           to: email,
-          subject: `You're in: ${name} — ${league?.name ?? 'MNS WNBA'}`,
+          subject: `You're in: ${name} — ${league?.name ?? sport.appName}`,
           html: emailShell({
-            preheader: `You've been given ${name} in ${league?.name ?? 'a WNBA dynasty league'}.`,
+            preheader: `You've been given ${name} in ${league?.name ?? `a ${sport.leagueLabel} dynasty league`}.`,
             heading: `You own ${esc(name)}`,
-            subheading: esc(league?.name ?? 'MNS WNBA dynasty'),
+            subheading: esc(league?.name ?? `${sport.appName} dynasty`),
             bodyHtml: emailNote(
               `The commissioner handed you the keys. Sign in — or create an account — with <b style="color:#f0f4f8">this email address</b> (${esc(email)}) and the team links to you automatically.`
             ),
             ctaLabel: 'Claim my team',
             ctaUrl: `${appUrl}/sign-up`,
-            footerLine: `Sent because the commissioner of ${esc(league?.name ?? 'an MNS league')} added this address on wnba.mnsfantasy.com.`,
+            footerLine: `Sent because the commissioner of ${esc(league?.name ?? 'an MNS league')} added this address on ${sport.appHost}.`,
           }),
           text: [
-            `You own ${name} in ${league?.name ?? 'an MNS WNBA dynasty league'}.`,
+            `You own ${name} in ${league?.name ?? `an ${sport.appName} dynasty league`}.`,
             '',
             `Sign in or create an account with this email address (${email}) and the team links to you automatically.`,
             `${appUrl}/sign-up`,

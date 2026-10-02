@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { useLeague } from '../contexts/LeagueContext'
@@ -44,7 +45,7 @@ export function TeamSelect() {
           <div className="text-6xl mb-4">🏀</div>
           <h2 className="text-2xl font-bold mb-2">No leagues yet</h2>
           <p className="text-gray-400 mb-6 max-w-md mx-auto">
-            You're not in any WNBA leagues. Start a new dynasty as commissioner, or wait for a league invite to land in your inbox.
+            You're not in any {sport.leagueLabel} leagues. Start a new dynasty as commissioner, or wait for a league invite to land in your inbox.
           </p>
           <Link
             to="/create-league"

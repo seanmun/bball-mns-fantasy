@@ -19,7 +19,15 @@ export default {
   // runtime queries only. Never add 'public' here: with our generic
   // table names (leagues, players, ...) drizzle would match other games'
   // public tables and try to DROP them.
-  schemaFilter: ['wnba'],
+  schemaFilter: [
+    (() => {
+      const key = process.env.VITE_SPORT
+      if (key !== 'wnba' && key !== 'nba') {
+        throw new Error(`VITE_SPORT must be wnba or nba for drizzle-kit — got ${JSON.stringify(key)}`)
+      }
+      return key
+    })(),
+  ],
   verbose: true,
   strict: true,
 } satisfies Config

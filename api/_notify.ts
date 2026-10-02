@@ -17,6 +17,7 @@ import type { WaiverOutcome } from '../src/lib/season/waivers.js'
 import type { LeagueConfig } from '../src/types/leagueConfig.js'
 import { capNotice } from '../src/rules/capRules.js'
 import { teamExposures, type DuesReceipt } from '../src/lib/season/capLock.js'
+import { sport } from '../src/lib/sport/index.js'
 import { tipClock } from '../src/lib/season/locks.js'
 
 // The league's voice in the inbox. Three transactional notes — waiver
@@ -25,7 +26,7 @@ import { tipClock } from '../src/lib/season/locks.js'
 // joins these after the merge; the sending lives here because members
 // are live NOW.
 
-const APP_URL = process.env.VITE_APP_URL || 'https://wnba.mnsfantasy.com'
+const APP_URL = process.env.VITE_APP_URL || sport.appUrl
 
 // Owners who haven't opted out of this KIND of email — a missing
 // pref key means on.
@@ -77,7 +78,7 @@ export async function sendWaiverResults(leagueId: string, outcomes: WaiverOutcom
         html: emailShell({
           preheader: 'This morning’s waiver results.',
           heading: 'Waivers cleared',
-          subheading: esc(league?.name ?? 'MNS WNBA'),
+          subheading: esc(league?.name ?? sport.appName),
           bodyHtml,
           ctaLabel: 'See my roster',
           ctaUrl: `${APP_URL}/league/${leagueId}/my-team`,
@@ -130,7 +131,7 @@ export async function sendTradeNote(
       html: emailShell({
         preheader: subject,
         heading,
-        subheading: esc(league?.name ?? 'MNS WNBA'),
+        subheading: esc(league?.name ?? sport.appName),
         bodyHtml: emailNote(detail.assetLines.map(esc).join('<br>')),
         ctaLabel: kind === 'proposed' ? 'Answer the offer' : 'See the trade',
         ctaUrl: `${APP_URL}/league/${leagueId}/trade-machine`,

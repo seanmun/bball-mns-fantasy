@@ -1,3 +1,4 @@
+import { sport } from './sport/index'
 import * as Sentry from '@sentry/react'
 
 type LogLevel = 'info' | 'warn' | 'error' | 'critical'
@@ -18,7 +19,7 @@ function formatTelegramMessage(
   ctx?: LogContext
 ): string {
   const emoji = level === 'critical' ? '🚨' : '⚠️'
-  const lines = [`${emoji} *MNS WNBA ${level.toUpperCase()}*`, ``, `\`${message}\``]
+  const lines = [`${emoji} *${sport.appName} ${level.toUpperCase()}*`, ``, `\`${message}\``]
 
   if (error instanceof Error) {
     lines.push(``, `Error: \`${error.message}\``)

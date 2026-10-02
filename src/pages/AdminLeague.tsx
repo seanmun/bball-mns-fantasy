@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
@@ -95,7 +96,7 @@ export function AdminLeague() {
       </div>
 
       <p className="text-sm text-gray-400 mb-6">
-        Override anything from the WNBA preset. Everything else stays at the
+        Override anything from the {sport.leagueLabel} preset. Everything else stays at the
         default. Changes apply immediately on save — they don't affect already-
         locked rosters/keepers/fees.
       </p>

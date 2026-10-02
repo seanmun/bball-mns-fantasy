@@ -9,6 +9,7 @@ import {
   mnsTeamOwners,
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
+import { sport } from '../../../src/lib/sport/index.js'
 import { logger } from '../../_logger.js'
 import {
   createDraft,
@@ -124,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
     }
 
-    const appUrl = process.env.VITE_APP_URL || 'https://wnba.mnsfantasy.com'
+    const appUrl = process.env.VITE_APP_URL || sport.appUrl
     const rounds = config.draft?.rounds ?? config.roster?.activeSize ?? 10
     const draftName = `${league.name} · ${league.seasonYear} veteran draft`
 

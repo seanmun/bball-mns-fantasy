@@ -9,12 +9,13 @@ import {
 } from '../../../../src/lib/db/schema.js'
 import { logger } from '../../../_logger.js'
 import { resolveIdentity } from '../../../../src/lib/players/identity.js'
+import { sport } from '../../../../src/lib/sport/index.js'
 import { scrapeWnbaPlayers } from '../../../../src/lib/scrapers/wnba.js'
 import type { ExternalIds } from '../../../../src/types/player.js'
 
 function generatePlayerId(slug: string): string {
   const suffix = Math.random().toString(36).slice(2, 8)
-  return `wnba-${slug}-${suffix}`
+  return `${sport.key}-${slug}-${suffix}`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -42,8 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .where(eq(mnsLeagues.id, leagueId))
     .limit(1)
   if (!league) return res.status(404).json({ error: 'League not found' })
-  if (league.sport !== 'wnba') {
-    return res.status(400).json({ error: 'Player pool population currently supports WNBA only' })
+  if (league.sport !== sport.key) {
+    return res.status(400).json({ error: `This deployment populates ${sport.leagueLabel} pools only.` })
   }
 
   try {
@@ -104,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           teamCode: p.team,
           leagueId,
           teamId: null,
-          sport: 'wnba',
+          sport: sport.key,
           slot: 'active',
         })
         inserted++
@@ -114,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Audit log
     await db.insert(mnsLeagueImports).values({
       leagueId,
-      importer: 'wnba_player_pool',
+      importer: `${sport.key}_player_pool`,
       ranBy: userId,
       resultSummary: {
         totalScraped: scrape.totalCount,

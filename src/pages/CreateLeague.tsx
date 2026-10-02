@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { sport } from '../lib/sport/index'
 import { useUser } from '@clerk/clerk-react'
 import { useApi } from '../hooks/useApi'
 import { useLeague } from '../contexts/LeagueContext'
 import type { League } from '../types/league'
+
+const preset = sport.preset
+const capM = `$${(preset.cap.base / 1_000_000).toFixed(1)}M`
 
 export function CreateLeague() {
   const navigate = useNavigate()
@@ -11,8 +15,10 @@ export function CreateLeague() {
   const { apiFetch } = useApi()
   const { refreshLeagues } = useLeague()
 
-  const defaultName =
-    user?.firstName ? `${user.firstName}'s WNBA Dynasty` : 'My WNBA Dynasty'
+  // Handles, never legal names: the default league name uses the
+  // username, falling back to the email's local part.
+  const handle = user?.username ?? user?.primaryEmailAddress?.emailAddress.split('@')[0] ?? null
+  const defaultName = handle ? `${handle}'s ${sport.leagueLabel} Dynasty` : `My ${sport.leagueLabel} Dynasty`
   const [name, setName] = useState(defaultName)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,10 +43,10 @@ export function CreateLeague() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-4xl font-bold mb-2">Create a WNBA Dynasty</h1>
+      <h1 className="text-4xl font-bold mb-2">Create a {sport.leagueLabel} Dynasty</h1>
       <p className="text-gray-400 mb-8">
-        Spin up a new MNS WNBA league. You become the commissioner. We'll set
-        you up in the keeper phase with the standard WNBA preset — every
+        Spin up a new {sport.appName} league. You become the commissioner. We'll set
+        you up in the keeper phase with the standard {sport.leagueLabel} preset — every
         knob is editable from the LM Hub once the league is live.
       </p>
 
@@ -53,7 +59,7 @@ export function CreateLeague() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="My Money Never Sleeps WNBA"
+            placeholder={`My Money Never Sleeps ${sport.leagueLabel}`}
             className="w-full px-4 py-3 bg-mns-card border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-green-400 focus:outline-none transition-colors"
             maxLength={100}
             required
@@ -67,12 +73,12 @@ export function CreateLeague() {
         <div className="bg-mns-card border border-gray-800 rounded-lg p-5 text-sm text-gray-400">
           <div className="font-semibold text-gray-300 mb-2">Defaults applied</div>
           <ul className="space-y-1">
-            <li>• Sport: WNBA · Season 2026</li>
-            <li>• 10 active roster spots, 5 keepers max, 3 IR slots</li>
-            <li>• 10-round snake draft, 2 rookie rounds</li>
-            <li>• $1.5M cap, $50 buy-in, $15 franchise tag, $10 redshirt</li>
-            <li>• 13-week regular season, 6-team playoffs (3 weeks, top 2 byes)</li>
-            <li>• 9-cat category-record scoring</li>
+            <li>• Sport: {sport.leagueLabel} · Season {preset.season.year}</li>
+            <li>• {preset.roster.activeSize} active roster spots, {preset.roster.maxKeepers} keepers max, {preset.roster.irSlots} IR slots</li>
+            <li>• {preset.draft.rounds}-round {preset.draft.type} draft, {preset.draft.rookieRounds} rookie rounds</li>
+            <li>• {capM} cap, ${preset.fees.buyIn} buy-in, ${preset.fees.franchiseTagFee} franchise tag, ${preset.fees.redshirtFee} redshirt</li>
+            <li>• {preset.season.weeks}-week regular season, {preset.schedule.playoffTeams}-team playoffs ({preset.schedule.playoffWeeks} weeks, top {preset.schedule.playoffByeTeams} byes)</li>
+            <li>• {preset.scoring.categories.length}-cat {preset.scoring.mode.replace('_', '-')} scoring</li>
           </ul>
           <p className="mt-3 text-xs text-gray-500">
             All editable from <span className="text-gray-300">/lm/league</span> after creation.

@@ -2,6 +2,7 @@ import { and, eq, inArray, lte, sql } from 'drizzle-orm'
 import { mnsPlayers, mnsTeams, mnsTransactions, mnsWaiverClaims } from '../db/schema.js'
 import { easternToday } from './score.js'
 import { capUsed, rosterSpots } from './roster.js'
+import { sport } from '../sport/index.js'
 import type { LeagueConfig } from '../../types/leagueConfig.js'
 
 // Free agency, Sean's spec from the live beta (2026-09-17):
@@ -81,7 +82,7 @@ export async function waiverPriority(db: Db, leagueId: string): Promise<string[]
 // Where free agency stands right now, from today's real schedule: the
 // pool is OPEN until the first tipoff of the Eastern day (or all day
 // when nobody plays), then claims-only until tomorrow's clear.
-const ESPN_BOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard'
+const ESPN_BOARD = `https://site.api.espn.com/apis/site/v2/sports/${sport.espn.league}/scoreboard`
 
 export async function faWindow(now = new Date()): Promise<{
   mode: 'open' | 'waivers'

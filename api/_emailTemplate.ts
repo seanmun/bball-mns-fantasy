@@ -1,3 +1,4 @@
+import { sport } from '../src/lib/sport/index.js'
 import { esc } from './_email.js'
 
 // The MNS email look, ported from ncaa's email-templates/results.html:
@@ -121,7 +122,7 @@ export function emailShell(opts: {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
 
         <tr><td style="padding: 32px 24px 8px 24px; text-align: center;">
-          <p style="color: ${TEXT}; font-family: ${FONT}; font-size: 22px; font-weight: 800; letter-spacing: 1px; margin: 0;">MNS<span style="color: ${GREEN};">WNBA</span></p>
+          <p style="color: ${TEXT}; font-family: ${FONT}; font-size: 22px; font-weight: 800; letter-spacing: 1px; margin: 0;">MNS<span style="color: ${GREEN};">${sport.leagueLabel}</span></p>
         </td></tr>
 
         <tr><td style="padding: 8px 24px 4px 24px;">

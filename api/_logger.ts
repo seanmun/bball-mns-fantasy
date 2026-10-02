@@ -1,3 +1,4 @@
+import { sport } from '../src/lib/sport/index.js'
 type LogLevel = 'info' | 'warn' | 'error' | 'critical'
 
 type LogContext = Record<string, unknown>
@@ -7,7 +8,7 @@ async function sendAlertToTelegram(message: string, ctx?: LogContext): Promise<v
   const chatId = process.env.TELEGRAM_ALERT_CHAT_ID
   if (!token || !chatId) return
   try {
-    const lines = [`🚨 *MNS WNBA CRITICAL (api)*`, ``, `\`${message}\``]
+    const lines = [`🚨 *${sport.appName} CRITICAL (api)*`, ``, `\`${message}\``]
     if (ctx && Object.keys(ctx).length > 0) {
       lines.push('', JSON.stringify(ctx))
     }

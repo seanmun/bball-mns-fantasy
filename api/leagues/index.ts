@@ -5,7 +5,7 @@ import { db } from '../_db.js'
 import { mnsLeagues, mnsTeams, mnsTeamOwners } from '../../src/lib/db/schema.js'
 import { createLeagueSchema, parseBody } from '../_validation.js'
 import { logger } from '../_logger.js'
-import { WNBA_LEAGUE_PRESET } from '../../src/lib/presets/wnba.js'
+import { sport } from '../../src/lib/sport/index.js'
 import type { League } from '../../src/types/league.js'
 import type { Sport } from '../../src/types/leagueConfig.js'
 import type { LeaguePhase, ScoringMode } from '../../src/types/league.js'
@@ -90,9 +90,9 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
   if (!parsed.success) return res.status(400).json({ error: parsed.error })
 
   const { name } = parsed.data
-  const year = WNBA_LEAGUE_PRESET.season.year
+  const year = sport.preset.season.year
   const id = generateLeagueId(name, year)
-  const gameSlug = `mns-wnba-${year}`
+  const gameSlug = sport.hub.gameSlug(year)
 
   try {
     const [row] = await db
@@ -101,11 +101,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
         id,
         name,
         seasonYear: year,
-        sport: 'wnba',
+        sport: sport.key,
         gameSlug,
-        config: WNBA_LEAGUE_PRESET,
+        config: sport.preset,
         leaguePhase: 'keeper_season',
-        scoringMode: WNBA_LEAGUE_PRESET.scoring.mode,
+        scoringMode: sport.preset.scoring.mode,
         commissionerId: userId,
       })
       .returning()

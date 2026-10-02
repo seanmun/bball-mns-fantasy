@@ -13,6 +13,7 @@ import {
   index,
   unique,
 } from 'drizzle-orm/pg-core'
+import { sport } from '../sport/index.js'
 import { sql } from 'drizzle-orm'
 
 import type { LeagueConfig } from '../../types/leagueConfig'
@@ -42,7 +43,9 @@ import type {
 
 // All WNBA game tables live in the `wnba` Postgres schema. Shared
 // cross-game tables (users, marketing_*) stay in `public`.
-export const wnbaSchema = pgSchema('wnba')
+// Every table of this deployment's sport lives in the sport's own
+// Postgres schema — wnba.*, nba.* — named by the adapter, never shared.
+export const gameSchema = pgSchema(sport.schema)
 
 // Matches the live shared `users` table created by ncaa-mns-fantasy.
 // NOT-marking email .unique() here because the live table doesn't have
@@ -66,7 +69,7 @@ export const users = pgTable('users', {
 // they're enough to identify a league across the multi-tenant Neon DB.
 // `gameSlug` matches the NCAA convention ('mns-wnba-2026', 'mns-nba-2027')
 // for filtering in shared tables like marketing_game_prefs / email_log.
-export const mnsLeagues = wnbaSchema.table(
+export const mnsLeagues = gameSchema.table(
   'leagues',
   {
     id: text('id').primaryKey(),
@@ -98,7 +101,7 @@ export const mnsLeagues = wnbaSchema.table(
   ]
 )
 
-export const mnsTeams = wnbaSchema.table(
+export const mnsTeams = gameSchema.table(
   'teams',
   {
     id: text('id').primaryKey(),
@@ -127,7 +130,7 @@ export const mnsTeams = wnbaSchema.table(
   (t) => [index('idx_mns_teams_league').on(t.leagueId)]
 )
 
-export const mnsTeamOwners = wnbaSchema.table(
+export const mnsTeamOwners = gameSchema.table(
   'team_owners',
   {
     teamId: text('team_id')
@@ -163,7 +166,7 @@ export const mnsTeamOwners = wnbaSchema.table(
 // source swap is a new key, not a re-match. Names are resolved ONCE and
 // written down; birth_date is the disambiguator that makes a name
 // collision decidable instead of a guess.
-export const mnsPlayerIdentities = wnbaSchema.table(
+export const mnsPlayerIdentities = gameSchema.table(
   'player_identities',
   {
     id: text('id').primaryKey(),
@@ -193,7 +196,7 @@ export const mnsPlayerIdentities = wnbaSchema.table(
   ]
 )
 
-export const mnsPlayers = wnbaSchema.table(
+export const mnsPlayers = gameSchema.table(
   'players',
   {
     id: text('id').primaryKey(),
@@ -214,7 +217,7 @@ export const mnsPlayers = wnbaSchema.table(
     teamId: text('team_id').references(() => mnsTeams.id, {
       onDelete: 'set null',
     }),
-    sport: text('sport').notNull().default('wnba'),
+    sport: text('sport').notNull().default(sport.key),
     slot: text('slot').notNull().default('active'),
     onIR: boolean('on_ir').notNull().default(false),
     // ESPN's injury report, refreshed each tick: status ('Out',
@@ -274,7 +277,7 @@ export const mnsPlayers = wnbaSchema.table(
 // ROSTERS — keeper decisions
 // ============================================================================
 
-export const mnsRosters = wnbaSchema.table(
+export const mnsRosters = gameSchema.table(
   'rosters',
   {
     id: text('id').primaryKey(),
@@ -311,7 +314,7 @@ export const mnsRosters = wnbaSchema.table(
 // REGULAR-SEASON ROSTERS — active/IR/redshirt slot management
 // ============================================================================
 
-export const mnsRegularSeasonRosters = wnbaSchema.table(
+export const mnsRegularSeasonRosters = gameSchema.table(
   'regular_season_rosters',
   {
     id: text('id').primaryKey(),
@@ -347,7 +350,7 @@ export const mnsRegularSeasonRosters = wnbaSchema.table(
 // date is the latest row at/before it (set it once, it carries
 // forward); no row anywhere means the player's base slot. Past dates
 // never get new rows: that is the lock.
-export const mnsDailyLineups = wnbaSchema.table(
+export const mnsDailyLineups = gameSchema.table(
   'daily_lineups',
   {
     id: text('id').primaryKey().default(sql`(gen_random_uuid())::text`),
@@ -375,7 +378,7 @@ export const mnsDailyLineups = wnbaSchema.table(
 // DRAFT
 // ============================================================================
 
-export const mnsDrafts = wnbaSchema.table(
+export const mnsDrafts = gameSchema.table(
   'drafts',
   {
     id: text('id').primaryKey(),
@@ -400,7 +403,7 @@ export const mnsDrafts = wnbaSchema.table(
   (t) => [index('idx_mns_drafts_league_season').on(t.leagueId, t.seasonYear)]
 )
 
-export const mnsPickAssignments = wnbaSchema.table(
+export const mnsPickAssignments = gameSchema.table(
   'pick_assignments',
   {
     id: text('id').primaryKey(),
@@ -444,7 +447,7 @@ export const mnsPickAssignments = wnbaSchema.table(
 // has been traded (or re-traded). Keyed by (season, round, original
 // team) — the identity a pick keeps no matter how many hands it
 // passes through.
-export const mnsFuturePicks = wnbaSchema.table(
+export const mnsFuturePicks = gameSchema.table(
   'future_picks',
   {
     id: text('id').primaryKey(),
@@ -468,7 +471,7 @@ export const mnsFuturePicks = wnbaSchema.table(
   ]
 )
 
-export const mnsRookieDraftPicks = wnbaSchema.table(
+export const mnsRookieDraftPicks = gameSchema.table(
   'rookie_draft_picks',
   {
     id: text('id').primaryKey(),
@@ -493,7 +496,7 @@ export const mnsRookieDraftPicks = wnbaSchema.table(
   ]
 )
 
-export const mnsDraftHistory = wnbaSchema.table(
+export const mnsDraftHistory = gameSchema.table(
   'draft_history',
   {
     id: text('id').primaryKey(),
@@ -516,7 +519,7 @@ export const mnsDraftHistory = wnbaSchema.table(
 // SCHEDULE — games, league_weeks, matchups
 // ============================================================================
 
-export const mnsGames = wnbaSchema.table(
+export const mnsGames = gameSchema.table(
   'games',
   {
     id: text('id').primaryKey(),
@@ -531,7 +534,7 @@ export const mnsGames = wnbaSchema.table(
   (t) => [index('idx_mns_games_date').on(t.gameDate, t.seasonYear)]
 )
 
-export const mnsLeagueWeeks = wnbaSchema.table(
+export const mnsLeagueWeeks = gameSchema.table(
   'league_weeks',
   {
     id: text('id').primaryKey(),
@@ -549,7 +552,7 @@ export const mnsLeagueWeeks = wnbaSchema.table(
   (t) => [index('idx_mns_league_weeks_league_season').on(t.leagueId, t.seasonYear)]
 )
 
-export const mnsMatchups = wnbaSchema.table(
+export const mnsMatchups = gameSchema.table(
   'matchups',
   {
     id: text('id').primaryKey(),
@@ -586,7 +589,7 @@ export const mnsMatchups = wnbaSchema.table(
 // on it: instant pickups, waiver grants, executed trades. The
 // transactions page reads THIS; the source tables stay authoritative
 // for their own mechanics.
-export const mnsTransactions = wnbaSchema.table(
+export const mnsTransactions = gameSchema.table(
   'transactions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -605,7 +608,7 @@ export const mnsTransactions = wnbaSchema.table(
 // One row per notification batch that must fire exactly once — the
 // lineup warning keys on (league, kind, day) so a 20-minute tick can
 // check freely and send once.
-export const mnsNotifyLog = wnbaSchema.table(
+export const mnsNotifyLog = gameSchema.table(
   'notify_log',
   {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -626,7 +629,7 @@ export const mnsNotifyLog = wnbaSchema.table(
 // tonight's grants (most recent grant to the back). add_player_ids is
 // still an ordered preference list within one claim, so being sniped
 // costs that player, not the slot.
-export const mnsWaiverClaims = wnbaSchema.table(
+export const mnsWaiverClaims = gameSchema.table(
   'waiver_claims',
   {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -661,7 +664,7 @@ export const mnsWaiverClaims = wnbaSchema.table(
 // only — ratio categories (FG%, A/TO) are computed at aggregation time,
 // never stored. Upserts key on (league, player, date) so re-ingesting a
 // corrected ESPN box is idempotent.
-export const mnsPlayerStatLines = wnbaSchema.table(
+export const mnsPlayerStatLines = gameSchema.table(
   'player_stat_lines',
   {
     id: uuid('id').primaryKey().defaultRandom(),
@@ -698,7 +701,7 @@ export const mnsPlayerStatLines = wnbaSchema.table(
 // FEES
 // ============================================================================
 
-export const mnsKeeperFees = wnbaSchema.table(
+export const mnsKeeperFees = gameSchema.table(
   'keeper_fees',
   {
     id: text('id').primaryKey(),
@@ -721,7 +724,7 @@ export const mnsKeeperFees = wnbaSchema.table(
   (t) => [index('idx_mns_keeper_fees_league').on(t.leagueId)]
 )
 
-export const mnsTeamFees = wnbaSchema.table(
+export const mnsTeamFees = gameSchema.table(
   'team_fees',
   {
     id: text('id').primaryKey(),
@@ -755,7 +758,7 @@ export const mnsTeamFees = wnbaSchema.table(
 // TRADES
 // ============================================================================
 
-export const mnsTradeProposals = wnbaSchema.table(
+export const mnsTradeProposals = gameSchema.table(
   'trade_proposals',
   {
     id: text('id').primaryKey(),
@@ -785,7 +788,7 @@ export const mnsTradeProposals = wnbaSchema.table(
   ]
 )
 
-export const mnsTradeProposalResponses = wnbaSchema.table(
+export const mnsTradeProposalResponses = gameSchema.table(
   'trade_proposal_responses',
   {
     id: text('id').primaryKey(),
@@ -811,7 +814,7 @@ export const mnsTradeProposalResponses = wnbaSchema.table(
 // WAGERS
 // ============================================================================
 
-export const mnsWagers = wnbaSchema.table(
+export const mnsWagers = gameSchema.table(
   'wagers',
   {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -849,7 +852,7 @@ export const mnsWagers = wnbaSchema.table(
 // WATCHLISTS
 // ============================================================================
 
-export const mnsWatchlists = wnbaSchema.table(
+export const mnsWatchlists = gameSchema.table(
   'watchlists',
   {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -874,7 +877,7 @@ export const mnsWatchlists = wnbaSchema.table(
 // player per season; PK includes season_year to support multi-season
 // projections cohabiting if we ever need them. seasonYear default
 // kept for backwards-compat with the WNBA scraper output.
-export const mnsProjectedStats = wnbaSchema.table(
+export const mnsProjectedStats = gameSchema.table(
   'projected_stats',
   {
     playerId: text('player_id')
@@ -905,7 +908,7 @@ export const mnsProjectedStats = wnbaSchema.table(
   (t) => [primaryKey({ columns: [t.playerId, t.seasonYear] })]
 )
 
-export const mnsPreviousStats = wnbaSchema.table(
+export const mnsPreviousStats = gameSchema.table(
   'previous_stats',
   {
     playerId: text('player_id')
@@ -934,7 +937,7 @@ export const mnsPreviousStats = wnbaSchema.table(
 // PROSPECTS
 // ============================================================================
 
-export const mnsProspects = wnbaSchema.table(
+export const mnsProspects = gameSchema.table(
   'prospects',
   {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -955,7 +958,7 @@ export const mnsProspects = wnbaSchema.table(
     strengths: text('strengths').array(),
     weaknesses: text('weaknesses').array(),
     playerComparison: text('player_comparison'),
-    sport: text('sport').notNull().default('wnba'),
+    sport: text('sport').notNull().default(sport.key),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -966,7 +969,7 @@ export const mnsProspects = wnbaSchema.table(
 // PORTFOLIO — prize pool wallet tracking
 // ============================================================================
 
-export const mnsPortfolios = wnbaSchema.table(
+export const mnsPortfolios = gameSchema.table(
   'portfolios',
   {
     id: text('id').primaryKey(),
@@ -989,7 +992,7 @@ export const mnsPortfolios = wnbaSchema.table(
 // PLAYOFFS
 // ============================================================================
 
-export const mnsPlayoffBrackets = wnbaSchema.table(
+export const mnsPlayoffBrackets = gameSchema.table(
   'playoff_brackets',
   {
     id: text('id').primaryKey(),
@@ -1005,7 +1008,7 @@ export const mnsPlayoffBrackets = wnbaSchema.table(
   (t) => [index('idx_mns_playoff_brackets_league').on(t.leagueId)]
 )
 
-export const mnsPrizePayouts = wnbaSchema.table(
+export const mnsPrizePayouts = gameSchema.table(
   'prize_payouts',
   {
     id: text('id').primaryKey(),
@@ -1025,7 +1028,7 @@ export const mnsPrizePayouts = wnbaSchema.table(
 // AUDIT — importer log + phase transitions
 // ============================================================================
 
-export const mnsLeagueImports = wnbaSchema.table(
+export const mnsLeagueImports = gameSchema.table(
   'league_imports',
   {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -1041,7 +1044,7 @@ export const mnsLeagueImports = wnbaSchema.table(
   (t) => [index('idx_mns_league_imports_league').on(t.leagueId)]
 )
 
-export const mnsPhaseTransitions = wnbaSchema.table(
+export const mnsPhaseTransitions = gameSchema.table(
   'phase_transitions',
   {
     id: uuid('id').defaultRandom().primaryKey(),

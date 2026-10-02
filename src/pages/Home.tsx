@@ -2,7 +2,10 @@ import { useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import { useLeague } from '../contexts/LeagueContext'
+import { sport } from '../lib/sport/index'
 import { branding } from '../lib/branding'
+
+const capM = `$${(sport.preset.cap.base / 1_000_000).toFixed(1)}M`
 
 export function Home() {
   const navigate = useNavigate()
@@ -80,15 +83,15 @@ export function Home() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-pink-400"></span>
               </span>
-              WNBA Edition · {branding.identity.seasonLabel.split(' ')[0]}
+              {sport.leagueLabel} Edition · {branding.identity.seasonLabel.split(' ')[0]}
             </div>
 
             <p className="text-xl sm:text-2xl text-gray-300 mb-4 max-w-3xl mx-auto">
-              Where Fantasy WNBA Meets Wall Street
+              Where Fantasy {sport.leagueLabel} Meets Wall Street
             </p>
 
             <p className="text-lg text-gray-400 mb-8 max-w-3xl mx-auto">
-              Navigate the WNBA salary cap, manage keeper contracts with advancing rounds, and make strategic decisions with real monetary consequences. Every fee compounds the prize pool — sweat your matchups and your portfolio, because money never sleeps.
+              Navigate the {sport.leagueLabel} salary cap, manage keeper contracts with advancing rounds, and make strategic decisions with real monetary consequences. Every fee compounds the prize pool — sweat your matchups and your portfolio, because money never sleeps.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -112,8 +115,8 @@ export function Home() {
       {/* Features */}
       <div id="features" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold mb-4">What Makes MNS WNBA Special</h2>
-          <p className="text-gray-400 text-lg">A sophisticated platform for serious dynasty WNBA owners</p>
+          <h2 className="text-4xl font-bold mb-4">What Makes {sport.appName} Special</h2>
+          <p className="text-gray-400 text-lg">A sophisticated platform for serious dynasty {sport.leagueLabel} owners</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -121,13 +124,13 @@ export function Home() {
           <div className="bg-mns-card rounded-lg border border-gray-800 p-8 hover:border-green-400/50 transition-all hover:shadow-[0_0_20px_rgba(74,222,128,0.2)]">
             <div className="flex items-center gap-3 mb-4">
               <img src="/icons/money-icon.webp" alt="Salary Cap" className="w-12 h-12 rounded-full" />
-              <h3 className="text-xl font-bold">WNBA Salary Cap</h3>
+              <h3 className="text-xl font-bold">{sport.leagueLabel} Salary Cap</h3>
             </div>
             <p className="text-gray-400 mb-4">
-              Operate inside the real $1.5M WNBA cap. Every contract is a trade-off — there's no room for waste.
+              Operate inside the real {capM} {sport.leagueLabel} cap. Every contract is a trade-off — there's no room for waste.
             </p>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li className="flex items-start gap-2"><span className="text-green-400 flex-shrink-0">•</span><span>Tight $1.5M ceiling enforced live</span></li>
+              <li className="flex items-start gap-2"><span className="text-green-400 flex-shrink-0">•</span><span>Tight {capM} ceiling enforced live</span></li>
               <li className="flex items-start gap-2"><span className="text-green-400 flex-shrink-0">•</span><span>Trade-cap flexibility per commissioner config</span></li>
               <li className="flex items-start gap-2"><span className="text-green-400 flex-shrink-0">•</span><span>Visual cap thermometer + fee preview</span></li>
             </ul>
@@ -279,7 +282,7 @@ export function Home() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
         <h2 className="text-4xl font-bold mb-6">Ready to Build Your Dynasty?</h2>
         <p className="text-xl text-gray-400 mb-8">
-          The most sophisticated fantasy WNBA league on the internet. Strategy, finance, hoops.
+          The most sophisticated fantasy {sport.leagueLabel} league on the internet. Strategy, finance, hoops.
         </p>
         <Link
           to="/sign-in"

@@ -1,3 +1,4 @@
+import { sport } from '../lib/sport/index'
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
@@ -87,7 +88,7 @@ export function AdminTeams() {
       </div>
 
       <div className="bg-mns-card border border-gray-800 rounded-lg p-3 mb-6 text-sm text-gray-400">
-        Recommended: 4–12 teams. Add them one at a time below. Owners are invited by email — they get full access once they sign in at <span className="text-gray-300">wnba.mnsfantasy.com</span>.
+        Recommended: 4–12 teams. Add them one at a time below. Owners are invited by email — they get full access once they sign in at <span className="text-gray-300">{sport.appHost}</span>.
       </div>
 
       {error && (

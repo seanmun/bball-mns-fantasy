@@ -14,7 +14,7 @@ import {
   unique,
 } from 'drizzle-orm/pg-core'
 import { sport } from '../sport/index.js'
-import { sql } from 'drizzle-orm'
+import { eq, isNotNull, sql } from 'drizzle-orm'
 
 import type { LeagueConfig } from '../../types/leagueConfig'
 import type { LeaguePhase, ScoringMode } from '../../types/league'
@@ -1058,4 +1058,37 @@ export const mnsPhaseTransitions = gameSchema.table(
     preconditionsMet: jsonb('preconditions_met'),
   },
   (t) => [index('idx_mns_phase_transitions_league').on(t.leagueId)]
+)
+
+// ── Hub contract views ─────────────────────────────────────────────
+// The hub (mns-fantasy) lists a member's leagues across every game by
+// reading two views with one shape from each game schema:
+//   <game>.hub_leagues  (id, name, game_slug, format, created_at)
+//   <game>.hub_members  (league_id, user_id, team_name, joined_at)
+// They live HERE, in the drizzle schema, so a push creates them with
+// the tables and never drops them as strangers — which is how the
+// WNBA pair went missing after being applied once by hand.
+export const hubLeagues = gameSchema.view('hub_leagues').as((qb) =>
+  qb
+    .select({
+      id: mnsLeagues.id,
+      name: mnsLeagues.name,
+      game_slug: mnsLeagues.gameSlug,
+      format: sql<string>`'season'::text`.as('format'),
+      created_at: mnsLeagues.createdAt,
+    })
+    .from(mnsLeagues)
+)
+
+export const hubMembers = gameSchema.view('hub_members').as((qb) =>
+  qb
+    .select({
+      league_id: mnsTeams.leagueId,
+      user_id: mnsTeamOwners.userId,
+      team_name: sql<string>`${mnsTeams.name}`.as('team_name'),
+      joined_at: sql<Date>`${mnsTeamOwners.createdAt}`.as('joined_at'),
+    })
+    .from(mnsTeamOwners)
+    .innerJoin(mnsTeams, eq(mnsTeams.id, mnsTeamOwners.teamId))
+    .where(isNotNull(mnsTeamOwners.userId))
 )

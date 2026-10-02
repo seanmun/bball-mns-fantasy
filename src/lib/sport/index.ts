@@ -1,5 +1,5 @@
 import type { SportAdapter } from './types'
-import { wnba } from './wnba'
+import { wnba } from './wnba.js'
 import type { Sport } from '../../types/leagueConfig'
 
 // One codebase, deployed once per sport. VITE_SPORT on the Vercel

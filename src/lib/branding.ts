@@ -44,6 +44,6 @@ export interface Branding {
   }
 }
 
-export { sport as sportAdapter } from './sport/index'
-import { sport } from './sport/index'
+export { sport as sportAdapter } from './sport/index.js'
+import { sport } from './sport/index.js'
 export const branding: Branding = sport.branding

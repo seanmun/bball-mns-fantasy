@@ -1,4 +1,4 @@
-import { sport } from './sport/index'
+import { sport } from './sport/index.js'
 import * as Sentry from '@sentry/react'
 
 type LogLevel = 'info' | 'warn' | 'error' | 'critical'

@@ -9,6 +9,7 @@ import {
   mnsTeamOwners,
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { sport } from '../../../src/lib/sport/index.js'
 import { logger } from '../../_logger.js'
 import {
@@ -111,9 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // The draftable pool: every league player not already on a roster
     // (keepers stay kept — they are simply absent from the board).
     const buildItems = async () => {
-      const pool = await db
-        .select()
-        .from(mnsPlayers)
+      const pool = await leaguePlayers(db)
         .where(and(eq(mnsPlayers.leagueId, leagueId), isNull(mnsPlayers.teamId)))
       return pool
         .sort((a, b) => (b.salary ?? 0) - (a.salary ?? 0))

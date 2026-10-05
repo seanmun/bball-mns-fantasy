@@ -3,8 +3,9 @@ import {
   mnsLeagueWeeks,
   mnsMatchups,
   mnsPlayers,
-  mnsPlayerStatLines,
+  mnsSportStatLines,
 } from '../db/schema.js'
+import { leagueStatLines } from '../players/statLines.js'
 import { computeMatchupResult, type CategoryStats } from '../../rules/scoringRules.js'
 import { lineupResolver } from './lineups.js'
 import type { LeagueConfig } from '../../types/leagueConfig.js'
@@ -120,17 +121,14 @@ export async function scoreLeagueWeek(
   const resolveSlot = await lineupResolver(db, leagueId, endDate)
 
   const lines = rostered.length
-    ? await db
-        .select()
-        .from(mnsPlayerStatLines)
-        .where(
-          and(
-            eq(mnsPlayerStatLines.leagueId, leagueId),
-            gte(mnsPlayerStatLines.date, startDate),
-            lte(mnsPlayerStatLines.date, endDate),
-            inArray(mnsPlayerStatLines.playerId, rostered.map((p: { id: string }) => p.id))
-          )
+    ? await leagueStatLines(db).where(
+        and(
+          eq(mnsPlayers.leagueId, leagueId),
+          gte(mnsSportStatLines.date, startDate),
+          lte(mnsSportStatLines.date, endDate),
+          inArray(mnsPlayers.id, rostered.map((p: { id: string }) => p.id))
         )
+      )
     : []
 
   const zero = () => ({ pts: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, tpm: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0 })

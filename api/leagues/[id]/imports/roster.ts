@@ -6,6 +6,7 @@ import {
   mnsPlayers,
   mnsTeams,
   mnsLeagueImports,
+  mnsSportPlayers,
 } from '../../../../src/lib/db/schema.js'
 import { bulkRosterImportSchema, parseBody } from '../../../_validation.js'
 import { logger } from '../../../_logger.js'
@@ -46,8 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Load all players and teams in this league for matching
   const [playerRows, teamRows] = await Promise.all([
-    db.select({ id: mnsPlayers.id, name: mnsPlayers.name })
-      .from(mnsPlayers)
+    db.select({ id: mnsPlayers.id, name: mnsSportPlayers.name })
+      .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
       .where(eq(mnsPlayers.leagueId, leagueId)),
     db.select({ id: mnsTeams.id, abbrev: mnsTeams.abbrev })
       .from(mnsTeams)
@@ -98,7 +99,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const updates: Record<string, unknown> = { updatedAt: new Date() }
     if (teamId !== undefined) updates.teamId = teamId
     if (row.slot !== undefined) updates.slot = row.slot
-    if (row.position !== undefined) updates.position = row.position
     if (row.keeperPriorYearRound !== undefined)
       updates.keeperPriorYearRound = row.keeperPriorYearRound
     if (row.isRookie !== undefined) updates.isRookie = row.isRookie

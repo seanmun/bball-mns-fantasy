@@ -7,9 +7,11 @@ import {
   mnsLeagueWeeks,
   mnsMatchups,
   mnsPlayers,
-  mnsPlayerStatLines,
   mnsTeams,
+  mnsSportStatLines,
 } from '../../../src/lib/db/schema.js'
+import { leagueStatLines } from '../../../src/lib/players/statLines.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { easternToday } from '../../../src/lib/season/score.js'
 import { lineupResolver } from '../../../src/lib/season/lineups.js'
 import { dayGames } from '../../../src/lib/season/statSources.js'
@@ -55,9 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const startDate = weekRows.reduce((a, w) => (w.startDate < a ? w.startDate : a), weekRows[0].startDate)
       const endDate = weekRows.reduce((a, w) => (w.endDate > a ? w.endDate : a), weekRows[0].endDate)
 
-      const roster = await db
-        .select()
-        .from(mnsPlayers)
+      const roster = await leaguePlayers(db)
         .where(
           and(
             eq(mnsPlayers.leagueId, leagueId),
@@ -65,20 +65,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           )
         )
       const lines = roster.length
-        ? await db
-            .select()
-            .from(mnsPlayerStatLines)
-            .where(
-              and(
-                eq(mnsPlayerStatLines.leagueId, leagueId),
-                gte(mnsPlayerStatLines.date, startDate),
-                lte(mnsPlayerStatLines.date, endDate),
-                inArray(
-                  mnsPlayerStatLines.playerId,
-                  roster.map((p) => p.id)
-                )
+        ? await leagueStatLines(db).where(
+            and(
+              eq(mnsPlayers.leagueId, leagueId),
+              gte(mnsSportStatLines.date, startDate),
+              lte(mnsSportStatLines.date, endDate),
+              inArray(
+                mnsPlayers.id,
+                roster.map((p) => p.id)
               )
             )
+          )
         : []
       const byPlayer = new Map<string, { pts: number; reb: number; ast: number; stl: number; blk: number; tpm: number; games: number }>()
       for (const l of lines) {

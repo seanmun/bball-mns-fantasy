@@ -10,6 +10,7 @@ import {
   mnsTeamOwners,
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { computeStandings, easternToday } from '../../../src/lib/season/score.js'
 import { dayGames } from '../../../src/lib/season/statSources.js'
 import { faWindow, nextClearDate } from '../../../src/lib/season/waivers.js'
@@ -42,9 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const teams = await db.select().from(mnsTeams).where(eq(mnsTeams.leagueId, leagueId))
     const owners = await db.select().from(mnsTeamOwners)
     const rec = await computeStandings(db, leagueId, league.seasonYear)
-    const players = await db
-      .select()
-      .from(mnsPlayers)
+    const players = await leaguePlayers(db)
       .where(eq(mnsPlayers.leagueId, leagueId))
 
     const [mine] = owners.filter(

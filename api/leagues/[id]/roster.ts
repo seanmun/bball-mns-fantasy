@@ -5,10 +5,12 @@ import { db } from '../../_db.js'
 import {
   mnsLeagues,
   mnsPlayers,
-  mnsPlayerStatLines,
   mnsTeamOwners,
   mnsTeams,
+  mnsSportPlayers,
 } from '../../../src/lib/db/schema.js'
+import { leagueStatLines } from '../../../src/lib/players/statLines.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { logger } from '../../_logger.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 import { faWindow, logTransaction } from '../../../src/lib/season/waivers.js'
@@ -97,9 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1)
     if (!mine) return res.status(403).json({ error: "You don't own a team in this league." })
 
-    const [player] = await db
-      .select()
-      .from(mnsPlayers)
+    const [player] = await leaguePlayers(db)
       .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
       .limit(1)
     if (!player || player.teamId !== mine.teamId) {
@@ -125,8 +125,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const hardCap = config.cap?.enabled ? config.cap.hardCap : null
     if (shape.unparks && hardCap != null) {
       const rows = await db
-        .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
-        .from(mnsPlayers)
+        .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, slot: mnsPlayers.slot })
+        .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
         .where(eq(mnsPlayers.leagueId, leagueId))
       if (capUsed(rows, mine.teamId) + (player.salary ?? 0) > hardCap) {
         return res.status(400).json({
@@ -147,12 +147,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Games on file — the shared half of both stash tests.
     const gamesPlayedFor = async () => {
-      const lines = await db
-        .select({ min: mnsPlayerStatLines.min })
-        .from(mnsPlayerStatLines)
-        .where(
-          and(eq(mnsPlayerStatLines.leagueId, leagueId), eq(mnsPlayerStatLines.playerId, playerId))
-        )
+      const lines = await leagueStatLines(db).where(
+        and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId))
+      )
       return lines.filter((l) => (l.min ?? 0) > 0).length
     }
 
@@ -233,8 +230,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (to === 'active' && positionShape.length > 0) {
       const dated = await effectiveSlots(db, leagueId, mine.teamId, effDate)
       const roster = await db
-        .select({ id: mnsPlayers.id, position: mnsPlayers.position })
-        .from(mnsPlayers)
+        .select({ id: mnsPlayers.id, position: mnsSportPlayers.position })
+        .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
         .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.teamId, mine.teamId)))
       const actives = roster.filter((r) => r.id === playerId || dated.get(r.id) === 'active')
       const fit = assignSlots(actives, positionShape)

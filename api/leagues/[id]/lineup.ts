@@ -4,10 +4,12 @@ import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
 import {
   mnsLeagues,
-  mnsPlayerStatLines,
   mnsTeamOwners,
   mnsTeams,
+  mnsPlayers,
+  mnsSportStatLines,
 } from '../../../src/lib/db/schema.js'
+import { leagueStatLines } from '../../../src/lib/players/statLines.js'
 import { effectiveSlots, isLockedDate } from '../../../src/lib/season/lineups.js'
 import { easternToday } from '../../../src/lib/season/score.js'
 import { dayGames } from '../../../src/lib/season/statSources.js'
@@ -48,10 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const slots = await effectiveSlots(db, leagueId, teamId, date)
     const games = await dayGames(date)
-    const lineRows = await db
-      .select()
-      .from(mnsPlayerStatLines)
-      .where(and(eq(mnsPlayerStatLines.leagueId, leagueId), eq(mnsPlayerStatLines.date, date)))
+    const lineRows = await leagueStatLines(db).where(
+      and(eq(mnsPlayers.leagueId, leagueId), eq(mnsSportStatLines.date, date))
+    )
     const lines: Record<string, { min: number; pts: number; reb: number; ast: number; stl: number; blk: number; fgm: number; fga: number }> = {}
     for (const l of lineRows) {
       if (!slots.has(l.playerId)) continue

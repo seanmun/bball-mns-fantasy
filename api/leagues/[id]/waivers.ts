@@ -8,7 +8,9 @@ import {
   mnsTeamOwners,
   mnsTeams,
   mnsWaiverClaims,
+  mnsSportPlayers,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import {
   faWindow,
   logTransaction,
@@ -57,9 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      const players = await db
-        .select()
-        .from(mnsPlayers)
+      const players = await leaguePlayers(db)
         .where(eq(mnsPlayers.leagueId, leagueId))
 
       const avgByPlayer = await seasonAverages(db, leagueId)
@@ -143,12 +143,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const players = await db
         .select({
           id: mnsPlayers.id,
-          name: mnsPlayers.name,
+          name: mnsSportPlayers.name,
           teamId: mnsPlayers.teamId,
           slot: mnsPlayers.slot,
-          teamCode: mnsPlayers.teamCode,
+          teamCode: mnsSportPlayers.teamCode,
         })
-        .from(mnsPlayers)
+        .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
         .where(eq(mnsPlayers.leagueId, leagueId))
       const byId = new Map(players.map((p) => [p.id, p]))
       // The tip-off lock: a player whose game has tipped stays on the
@@ -196,8 +196,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const addId = addPlayerIds[0]
         if (config.cap?.enabled) {
           const rows = await db
-            .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, id: mnsPlayers.id, slot: mnsPlayers.slot })
-            .from(mnsPlayers)
+            .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, id: mnsPlayers.id, slot: mnsPlayers.slot })
+            .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
             .where(eq(mnsPlayers.leagueId, leagueId))
           const rosterSalary = capUsed(rows, mine.teamId)
           const addSal = rows.find((p) => p.id === addId)?.salary ?? 0
@@ -219,7 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               sql`${mnsPlayers.teamId} is null`
             )
           )
-          .returning({ id: mnsPlayers.id, name: mnsPlayers.name })
+          .returning({ id: mnsPlayers.id })
         if (took.length === 0) {
           return res.status(409).json({ error: 'Somebody beat you to that player — refresh and pick again.' })
         }
@@ -229,18 +229,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .update(mnsPlayers)
             .set({ teamId: null, slot: 'active', onIR: false, isInternationalStash: false, redshirtedAt: null })
             .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, dropPlayerId)))
-            .returning({ name: mnsPlayers.name })
-          droppedName = droppedRow?.name ?? dropPlayerId
+            .returning({ id: mnsPlayers.id })
+          droppedName = droppedRow ? byId.get(dropPlayerId)?.name ?? dropPlayerId : null
           await clearFutureSlots(db, leagueId, mine.teamId, dropPlayerId, easternToday())
         }
         await logTransaction(db, leagueId, 'add_drop', [mine.teamId], {
-          added: took[0].name,
+          added: byId.get(addId)?.name ?? addId,
           ...(droppedName ? { dropped: droppedName } : {}),
         })
         // New salary on the books: say what it costs at first tip.
         const ex = (await teamExposures(db, leagueId, league.seasonYear, config, [mine.teamId])).get(mine.teamId)
         const notice = ex ? capNotice(ex.exposure, window.firstTip ? tipClock(window.firstTip) : null) : null
-        return res.status(200).json({ ok: true, instant: true, added: took[0].name, capNotice: notice })
+        return res.status(200).json({ ok: true, instant: true, added: byId.get(addId)?.name ?? addId, capNotice: notice })
       }
 
       // Append to the back of my queue for the clearing day.

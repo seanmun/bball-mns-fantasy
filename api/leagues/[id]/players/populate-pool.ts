@@ -46,14 +46,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    // One statement: every sport player not yet in this league. The
-    // league row carries the link and, for now, copies of the identity
-    // columns the table still requires — they go with the next schema
-    // step; every read already comes through the sport table.
+    // One statement: every sport player not yet in this league gets a
+    // league row carrying nothing but the link and league state.
     const inserted = await db.execute(sql`
-      insert into ${mnsPlayers} (id, league_id, sport_player_id, sport, slot, name, position, salary, team_code, external_ids)
-      select ${leagueId} || ':' || sp.id, ${leagueId}, sp.id, ${sport.key}, 'active',
-             sp.name, coalesce(nullif(sp.position, ''), 'F'), sp.salary, sp.team_code, sp.external_ids
+      insert into ${mnsPlayers} (id, league_id, sport_player_id, sport, slot)
+      select ${leagueId} || ':' || sp.id, ${leagueId}, sp.id, ${sport.key}, 'active'
       from ${mnsSportPlayers} sp
       where not exists (
         select 1 from ${mnsPlayers} p where p.league_id = ${leagueId} and p.sport_player_id = sp.id

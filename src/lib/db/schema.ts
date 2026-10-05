@@ -167,35 +167,6 @@ export const mnsTeamOwners = gameSchema.table(
 // source swap is a new key, not a re-match. Names are resolved ONCE and
 // written down; birth_date is the disambiguator that makes a name
 // collision decidable instead of a guess.
-export const mnsPlayerIdentities = gameSchema.table(
-  'player_identities',
-  {
-    id: text('id').primaryKey(),
-    sport: text('sport').notNull(),
-    fullName: text('full_name').notNull(),
-    // Accent-folded, punctuation-free, suffix-free.
-    normalizedName: text('normalized_name').notNull(),
-    // First name expanded (Matt -> Matthew). Only ever trusted with a
-    // birth-date confirmation, since short forms are gender-ambiguous.
-    canonicalName: text('canonical_name').notNull(),
-    birthDate: text('birth_date'),
-    externalIds: jsonb('external_ids')
-      .$type<Record<string, string>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    // Set when resolution was not certain — a human confirms rather
-    // than the app silently merging two people.
-    needsReview: boolean('needs_review').notNull().default(false),
-    reviewNote: text('review_note'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (t) => [
-    index('idx_mns_identities_norm').on(t.sport, t.normalizedName),
-    index('idx_mns_identities_canon').on(t.sport, t.canonicalName),
-    index('idx_mns_identities_review').on(t.needsReview),
-  ]
-)
 
 // ============================================================================
 // SPORT-LEVEL DATA — pulled from ESPN once per sport, served to every league
@@ -289,28 +260,21 @@ export const mnsPlayers = gameSchema.table(
   'players',
   {
     id: text('id').primaryKey(),
-    // Platform-specific identifiers (fantrax, hhs, wnba, yahoo, espn, ...).
-    // Replaces the NBA-era `fantrax_id NOT NULL UNIQUE` constraint — WNBA
-    // players don't have a fantrax id because Fantrax doesn't cover the W.
-    externalIds: jsonb('external_ids')
-      .$type<ExternalIds>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    name: text('name').notNull(),
-    position: text('position').notNull(),
-    salary: bigint('salary', { mode: 'number' }).notNull().default(0),
-    teamCode: text('team_code').notNull().default(''),
     leagueId: text('league_id').references(() => mnsLeagues.id, {
       onDelete: 'cascade',
     }),
+    // The sport-level player this league row stands for. Identity,
+    // salary, team, injury all live on sport_players; this row is the
+    // LEAGUE's state for her (team, slot, keeper, redshirt).
+    sportPlayerId: text('sport_player_id')
+      .notNull()
+      .references(() => mnsSportPlayers.id),
     teamId: text('team_id').references(() => mnsTeams.id, {
       onDelete: 'set null',
     }),
     sport: text('sport').notNull().default(sport.key),
     slot: text('slot').notNull().default('active'),
     onIR: boolean('on_ir').notNull().default(false),
-    // ESPN's injury report, refreshed each tick: status ('Out',
-    // 'Day-To-Day', ...) and the one-line note. Null = no report.
     // Declared for next season during keeper_season; consumed when the
     // commissioner locks keepers and releases everyone else.
     isKeeper: boolean('is_keeper').notNull().default(false),
@@ -319,33 +283,9 @@ export const mnsPlayers = gameSchema.table(
     // eligibility is SPENT, which is what redshirt_used remembers.
     redshirtedAt: timestamp('redshirted_at'),
     redshirtUsed: boolean('redshirt_used').notNull().default(false),
-    // Years in the league from ESPN (0 = rookie). The real rookie
-    // test; players.is_rookie is kept in sync from it.
-    yearsPro: integer('years_pro'),
-    // Where she actually IS, derived weekly from ESPN rosters:
-    //   rostered    — on a WNBA roster WITH a jersey: really here
-    //   rights_only — on a roster with no jersey: drafted, not reported
-    //   absent      — on no WNBA roster: playing elsewhere
-    // ESPN publishes no "did not report" flag, so rights_only is a
-    // heuristic — presence_override is the commissioner's correction
-    // and always wins.
-    leaguePresence: text('league_presence'),
+    // The commissioner's correction to the feed's presence read —
+    // rostered, rights_only or absent — and it always wins.
     presenceOverride: text('presence_override'),
-    // From ESPN team rosters, refreshed weekly — the veteran-vs-youth
-    // signal the assistant reasons with.
-    age: integer('age'),
-    injuryStatus: text('injury_status'),
-    injuryNote: text('injury_note'),
-    // Stamped when the report CHANGES for this player — "new news"
-    // indicators key off recency of this, not of the tick.
-    injuryUpdatedAt: timestamp('injury_updated_at'),
-    // The league-independent person this row represents — identity and
-    // every source's key for her live on player_identities.
-    identityId: text('identity_id').references(() => mnsPlayerIdentities.id),
-    // The sport-level player this league row stands for. Identity,
-    // salary, team, injury all live on sport_players; this row is the
-    // LEAGUE's state for her (team, slot, keeper, redshirt).
-    sportPlayerId: text('sport_player_id').references(() => mnsSportPlayers.id),
     isRookie: boolean('is_rookie').notNull().default(false),
     isInternationalStash: boolean('is_international_stash')
       .notNull()
@@ -759,38 +699,6 @@ export const mnsWaiverClaims = gameSchema.table(
 // only — ratio categories (FG%, A/TO) are computed at aggregation time,
 // never stored. Upserts key on (league, player, date) so re-ingesting a
 // corrected ESPN box is idempotent.
-export const mnsPlayerStatLines = gameSchema.table(
-  'player_stat_lines',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    leagueId: text('league_id')
-      .notNull()
-      .references(() => mnsLeagues.id, { onDelete: 'cascade' }),
-    playerId: text('player_id')
-      .notNull()
-      .references(() => mnsPlayers.id, { onDelete: 'cascade' }),
-    // Eastern-calendar date of the game, YYYY-MM-DD.
-    date: text('date').notNull(),
-    source: text('source').notNull(), // 'espn' | 'sim'
-    min: integer('min').notNull().default(0),
-    pts: integer('pts').notNull().default(0),
-    fgm: integer('fgm').notNull().default(0),
-    fga: integer('fga').notNull().default(0),
-    ftm: integer('ftm').notNull().default(0),
-    fta: integer('fta').notNull().default(0),
-    tpm: integer('tpm').notNull().default(0),
-    reb: integer('reb').notNull().default(0),
-    ast: integer('ast').notNull().default(0),
-    stl: integer('stl').notNull().default(0),
-    blk: integer('blk').notNull().default(0),
-    tov: integer('tov').notNull().default(0),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-  },
-  (t) => [
-    unique('mns_stat_lines_player_date_key').on(t.leagueId, t.playerId, t.date),
-    index('idx_mns_stat_lines_league_date').on(t.leagueId, t.date),
-  ]
-)
 
 // ============================================================================
 // FEES
@@ -972,61 +880,7 @@ export const mnsWatchlists = gameSchema.table(
 // player per season; PK includes season_year to support multi-season
 // projections cohabiting if we ever need them. seasonYear default
 // kept for backwards-compat with the WNBA scraper output.
-export const mnsProjectedStats = gameSchema.table(
-  'projected_stats',
-  {
-    playerId: text('player_id')
-      .notNull()
-      .references(() => mnsPlayers.id, { onDelete: 'cascade' }),
-    seasonYear: text('season_year').notNull().default('2025-26'),
-    name: text('name').notNull(),
-    teamCode: text('team_code').notNull().default(''),
-    position: text('position').notNull().default(''),
-    rkOv: integer('rk_ov'),
-    age: integer('age'),
-    salary: bigint('salary', { mode: 'number' }),
-    score: numeric('score', { precision: 8, scale: 2 }),
-    adp: numeric('adp', { precision: 8, scale: 2 }),
-    fgPercent: numeric('fg_percent', { precision: 5, scale: 3 }),
-    threePointMade: numeric('three_point_made', { precision: 6, scale: 2 }),
-    ftPercent: numeric('ft_percent', { precision: 5, scale: 3 }),
-    points: numeric('points', { precision: 6, scale: 2 }),
-    rebounds: numeric('rebounds', { precision: 6, scale: 2 }),
-    assists: numeric('assists', { precision: 6, scale: 2 }),
-    steals: numeric('steals', { precision: 6, scale: 2 }),
-    blocks: numeric('blocks', { precision: 6, scale: 2 }),
-    assistToTurnover: numeric('assist_to_turnover', { precision: 6, scale: 2 }),
-    salaryScore: numeric('salary_score', { precision: 8, scale: 2 }),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.playerId, t.seasonYear] })]
-)
 
-export const mnsPreviousStats = gameSchema.table(
-  'previous_stats',
-  {
-    playerId: text('player_id')
-      .notNull()
-      .references(() => mnsPlayers.id, { onDelete: 'cascade' }),
-    seasonYear: text('season_year').notNull().default('2024-25'),
-    name: text('name').notNull(),
-    teamCode: text('team_code').notNull().default(''),
-    position: text('position').notNull().default(''),
-    fgPercent: numeric('fg_percent', { precision: 5, scale: 3 }),
-    threePointMade: numeric('three_point_made', { precision: 6, scale: 2 }),
-    ftPercent: numeric('ft_percent', { precision: 5, scale: 3 }),
-    points: numeric('points', { precision: 6, scale: 2 }),
-    rebounds: numeric('rebounds', { precision: 6, scale: 2 }),
-    assists: numeric('assists', { precision: 6, scale: 2 }),
-    steals: numeric('steals', { precision: 6, scale: 2 }),
-    blocks: numeric('blocks', { precision: 6, scale: 2 }),
-    assistToTurnover: numeric('assist_to_turnover', { precision: 6, scale: 2 }),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.playerId, t.seasonYear] })]
-)
 
 // ============================================================================
 // PROSPECTS

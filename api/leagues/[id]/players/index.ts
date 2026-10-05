@@ -2,7 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { eq } from 'drizzle-orm'
 import { verifyAuth } from '../../../_middleware.js'
 import { db } from '../../../_db.js'
-import { mnsPlayers } from '../../../../src/lib/db/schema.js'
+import {
+  mnsPlayers,
+  mnsSportPlayers,
+} from '../../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../../src/lib/players/leaguePlayers.js'
 import { logger } from '../../../_logger.js'
 import { seasonAverages } from '../../../../src/lib/season/stats.js'
 import type { Player, ExternalIds, RookieDraftInfo, MigrationSource, PlayerSlot } from '../../../../src/types/player.js'
@@ -54,11 +58,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!leagueId) return res.status(400).json({ error: 'Missing league id' })
 
   try {
-    const rows = await db
-      .select()
-      .from(mnsPlayers)
+    const rows = await leaguePlayers(db)
       .where(eq(mnsPlayers.leagueId, leagueId))
-      .orderBy(mnsPlayers.salary)
+      .orderBy(mnsSportPlayers.salary)
 
     // Sort by salary desc (drizzle order by asc by default for bigint;
     // we want highest first)

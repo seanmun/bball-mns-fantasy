@@ -3,7 +3,15 @@ import { eq, gte } from 'drizzle-orm'
 import { and } from 'drizzle-orm'
 import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
-import { mnsLeagues, mnsPlayers, mnsPlayerStatLines, mnsTeamOwners, mnsTeams } from '../../../src/lib/db/schema.js'
+import {
+  mnsLeagues,
+  mnsPlayers,
+  mnsTeamOwners,
+  mnsTeams,
+  mnsSportPlayers,
+  mnsSportStatLines,
+} from '../../../src/lib/db/schema.js'
+import { leagueStatLines } from '../../../src/lib/players/statLines.js'
 import { computeStandings } from '../../../src/lib/season/score.js'
 import { COUNTS_AGAINST_CAP } from '../../../src/lib/season/roster.js'
 import { logger } from '../../_logger.js'
@@ -35,8 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const rec = await computeStandings(db, leagueId, league?.seasonYear)
     const salaries = await db
-      .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, id: mnsPlayers.id, slot: mnsPlayers.slot })
-      .from(mnsPlayers)
+      .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, id: mnsPlayers.id, slot: mnsPlayers.slot })
+      .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
       .where(eq(mnsPlayers.leagueId, leagueId))
     const salaryByTeam = new Map<string, number>()
     const teamOfPlayer = new Map<string, string>()
@@ -51,10 +59,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Season production per CURRENT roster — the research lens: what
     // each roster generates in every category, ratios from raw sums.
     const year = new Date().getFullYear()
-    const lines = await db
-      .select()
-      .from(mnsPlayerStatLines)
-      .where(and(eq(mnsPlayerStatLines.leagueId, leagueId), gte(mnsPlayerStatLines.date, `${year}-01-01`)))
+    const lines = await leagueStatLines(db).where(
+      and(eq(mnsPlayers.leagueId, leagueId), gte(mnsSportStatLines.date, `${year}-01-01`))
+    )
     type Prod = { pts: number; reb: number; ast: number; stl: number; blk: number; tpm: number; tov: number; fgm: number; fga: number; ftm: number; fta: number }
     const zeroProd = (): Prod => ({ pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tpm: 0, tov: 0, fgm: 0, fga: 0, ftm: 0, fta: 0 })
     const prodByTeam = new Map<string, Prod>()

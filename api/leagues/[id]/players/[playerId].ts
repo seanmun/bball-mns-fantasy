@@ -2,7 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, desc, eq } from 'drizzle-orm'
 import { verifyAuth, canManageLeague } from '../../../_middleware.js'
 import { db } from '../../../_db.js'
-import { mnsPlayers, mnsPlayerStatLines, mnsTeams } from '../../../../src/lib/db/schema.js'
+import {
+  mnsPlayers,
+  mnsTeams,
+  mnsSportStatLines,
+} from '../../../../src/lib/db/schema.js'
+import { leagueStatLines } from '../../../../src/lib/players/statLines.js'
+import { leaguePlayers } from '../../../../src/lib/players/leaguePlayers.js'
 import { updatePlayerSchema, parseBody } from '../../../_validation.js'
 import { logger } from '../../../_logger.js'
 
@@ -19,9 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET — the player card: details, injury news, recent game log.
   if (req.method === 'GET') {
     try {
-      const [p] = await db
-        .select()
-        .from(mnsPlayers)
+      const [p] = await leaguePlayers(db)
         .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
         .limit(1)
       if (!p) return res.status(404).json({ error: 'Player not found' })
@@ -34,13 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .limit(1)
         teamName = t?.name ?? null
       }
-      const log = await db
-        .select()
-        .from(mnsPlayerStatLines)
-        .where(
-          and(eq(mnsPlayerStatLines.leagueId, leagueId), eq(mnsPlayerStatLines.playerId, playerId))
-        )
-        .orderBy(desc(mnsPlayerStatLines.date))
+      const log = await leagueStatLines(db)
+        .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
+        .orderBy(desc(mnsSportStatLines.date))
         .limit(12)
       return res.status(200).json({
         player: {
@@ -105,7 +105,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const updates: Record<string, unknown> = { updatedAt: new Date() }
   if (parsed.data.teamId !== undefined) updates.teamId = parsed.data.teamId
   if (parsed.data.slot !== undefined) updates.slot = parsed.data.slot
-  if (parsed.data.position !== undefined) updates.position = parsed.data.position
   // The commissioner's correction to ESPN's presence heuristic: is she
   // really with a club, holding rights only, or abroad? This decides
   // redshirt vs international-stash eligibility, so it belongs to a

@@ -1,17 +1,18 @@
 import {
-  pgTable,
-  pgSchema,
-  text,
-  integer,
   bigint,
   boolean,
-  timestamp,
-  jsonb,
-  uuid,
-  numeric,
-  primaryKey,
   index,
+  integer,
+  jsonb,
+  numeric,
+  pgSchema,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
   unique,
+  uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core'
 import { sport } from '../sport/index.js'
 import { eq, isNotNull, sql } from 'drizzle-orm'
@@ -196,6 +197,94 @@ export const mnsPlayerIdentities = gameSchema.table(
   ]
 )
 
+// ============================================================================
+// SPORT-LEVEL DATA — pulled from ESPN once per sport, served to every league
+// ============================================================================
+//
+// The law: ESPN is read ONCE per sport per tick, never per league. These
+// tables are the sport's truth; league rows point at them. Keys are
+// ESPN's athlete ids, so box scores match exactly, never by name.
+
+export const mnsSportPlayers = gameSchema.table(
+  'sport_players',
+  {
+    // Ours. ESPN's athlete id when ESPN is the first source to list
+    // her; `hhs:<slug>` for a WNBA player known only to Her Hoop Stats
+    // (abroad, unsigned) until an ESPN roster names her.
+    id: text('id').primaryKey(),
+    // ESPN's athlete id once known — every box score keys on it.
+    espnId: text('espn_id'),
+    name: text('name').notNull(),
+    // OUR team code (ESPN's spelling mapped through the adapter).
+    teamCode: text('team_code').notNull().default(''),
+    position: text('position').notNull().default(''),
+    jersey: text('jersey'),
+    age: integer('age'),
+    dateOfBirth: text('date_of_birth'),
+    yearsPro: integer('years_pro'),
+    // rostered | rights_only | absent — judged by the sport adapter.
+    presence: text('presence').notNull().default('absent'),
+    // Real money, sport-level: the contract for this season, the
+    // scraped figure, or the league minimum when the source has none.
+    salary: bigint('salary', { mode: 'number' }).notNull().default(0),
+    salarySource: text('salary_source').notNull().default('unknown'),
+    salarySeasonYear: integer('salary_season_year'),
+    externalIds: jsonb('external_ids').$type<ExternalIds>().notNull().default(sql`'{}'::jsonb`),
+    injuryStatus: text('injury_status'),
+    injuryNote: text('injury_note'),
+    injuryUpdatedAt: timestamp('injury_updated_at'),
+    // Last roster pull that listed her on a club.
+    rosterSeenAt: timestamp('roster_seen_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('uq_sport_players_espn').on(t.espnId),
+    index('idx_sport_players_team').on(t.teamCode),
+    index('idx_sport_players_name').on(t.name),
+  ]
+)
+
+export const mnsSportStatLines = gameSchema.table(
+  'sport_stat_lines',
+  {
+    playerId: text('player_id')
+      .notNull()
+      .references(() => mnsSportPlayers.id, { onDelete: 'cascade' }),
+    // Eastern-calendar date of the game, YYYY-MM-DD.
+    date: text('date').notNull(),
+    eventId: text('event_id'),
+    min: integer('min').notNull().default(0),
+    pts: integer('pts').notNull().default(0),
+    fgm: integer('fgm').notNull().default(0),
+    fga: integer('fga').notNull().default(0),
+    ftm: integer('ftm').notNull().default(0),
+    fta: integer('fta').notNull().default(0),
+    tpm: integer('tpm').notNull().default(0),
+    reb: integer('reb').notNull().default(0),
+    ast: integer('ast').notNull().default(0),
+    stl: integer('stl').notNull().default(0),
+    blk: integer('blk').notNull().default(0),
+    tov: integer('tov').notNull().default(0),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.playerId, t.date] }), index('idx_sport_stat_lines_date').on(t.date)]
+)
+
+// When each sport pass last ran — rosters and salaries once a day,
+// box scores and injuries every tick — one row per kind per day.
+export const mnsSportSync = gameSchema.table(
+  'sport_sync',
+  {
+    kind: text('kind').notNull(),
+    dateKey: text('date_key').notNull(),
+    ranAt: timestamp('ran_at').defaultNow().notNull(),
+    detail: jsonb('detail'),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.dateKey] })]
+)
+
 export const mnsPlayers = gameSchema.table(
   'players',
   {
@@ -253,6 +342,10 @@ export const mnsPlayers = gameSchema.table(
     // The league-independent person this row represents — identity and
     // every source's key for her live on player_identities.
     identityId: text('identity_id').references(() => mnsPlayerIdentities.id),
+    // The sport-level player this league row stands for. Identity,
+    // salary, team, injury all live on sport_players; this row is the
+    // LEAGUE's state for her (team, slot, keeper, redshirt).
+    sportPlayerId: text('sport_player_id').references(() => mnsSportPlayers.id),
     isRookie: boolean('is_rookie').notNull().default(false),
     isInternationalStash: boolean('is_international_stash')
       .notNull()
@@ -270,6 +363,8 @@ export const mnsPlayers = gameSchema.table(
     index('idx_mns_players_league').on(t.leagueId),
     index('idx_mns_players_team').on(t.teamId),
     index('idx_mns_players_league_team').on(t.leagueId, t.teamId),
+    // One league row per sport player — the pool copy is idempotent.
+    uniqueIndex('uq_mns_players_league_sport').on(t.leagueId, t.sportPlayerId),
   ]
 )
 

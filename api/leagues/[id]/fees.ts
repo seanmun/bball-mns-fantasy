@@ -2,7 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { and, eq } from 'drizzle-orm'
 import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
-import { mnsLeagues, mnsPlayers, mnsTeamOwners, mnsTeams } from '../../../src/lib/db/schema.js'
+import {
+  mnsLeagues,
+  mnsPlayers,
+  mnsTeamOwners,
+  mnsTeams,
+} from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { capUsed, rosterSpots } from '../../../src/lib/season/roster.js'
 import { teamFees } from '../../../src/lib/season/fees.js'
 import { logger } from '../../_logger.js'
@@ -38,9 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const teamId = String(req.query.teamId ?? mine?.teamId ?? '')
     if (!teamId) return res.status(400).json({ error: "You don't own a team here — name one with ?teamId." })
 
-    const players = await db
-      .select()
-      .from(mnsPlayers)
+    const players = await leaguePlayers(db)
       .where(eq(mnsPlayers.leagueId, leagueId))
     const ledger = await teamFees(db, leagueId, teamId, league.seasonYear)
 

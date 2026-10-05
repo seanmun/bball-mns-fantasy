@@ -22,7 +22,11 @@ export interface SportAdapter {
   // jersey number" rule does NOT hold in the NBA, so each sport judges.
   presence(athlete: { jersey?: string | null }): 'rostered' | 'rights_only'
   // Where salaries come from. The server picks the implementation.
-  salary: { source: 'herhoopstats' | 'espn-contracts' }
+  salary: {
+    source: 'herhoopstats' | 'espn-contracts'
+    // What a player carries when the source has no number for them.
+    minimum?: number
+  }
   positions: {
     // What the feed labels players with.
     feed: string[]

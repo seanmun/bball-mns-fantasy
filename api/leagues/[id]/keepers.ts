@@ -8,6 +8,7 @@ import {
   mnsTeamOwners,
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { logger } from '../../_logger.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 
@@ -40,9 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1)
 
     if (req.method === 'GET') {
-      const players = await db
-        .select()
-        .from(mnsPlayers)
+      const players = await leaguePlayers(db)
         .where(and(eq(mnsPlayers.leagueId, leagueId), sql`${mnsPlayers.teamId} is not null`))
       const myRoster = players
         .filter((p) => mine && p.teamId === mine.teamId)

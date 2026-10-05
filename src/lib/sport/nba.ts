@@ -145,7 +145,7 @@ export const nba: SportAdapter = {
   presence: () => 'rostered',
   // ESPN publishes NBA contracts on the roster feed: contracts[] by
   // season year; the league minimum fills any gap.
-  salary: { source: 'espn-contracts' },
+  salary: { source: 'espn-contracts', minimum: NBA_LEAGUE_MINIMUM_2026_27 },
   positions: {
     feed: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'],
     defaultShape: NBA_LEAGUE_PRESET.roster.positionSlots ?? [],

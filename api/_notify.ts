@@ -7,7 +7,9 @@ import {
   mnsPlayers,
   mnsTeamOwners,
   mnsTeams,
+  mnsSportPlayers,
 } from '../src/lib/db/schema.js'
+import { leaguePlayers } from '../src/lib/players/leaguePlayers.js'
 import { esc, sendAll } from './_email.js'
 import { emailNote, emailShell } from './_emailTemplate.js'
 import { logger } from './_logger.js'
@@ -191,15 +193,13 @@ export async function sendLineupWarnings(
     if (playing.length === 0) return
 
     const games = await dayGames(today)
-    const players = await db
-      .select()
-      .from(mnsPlayers)
+    const players = await leaguePlayers(db)
       .where(
         and(
           eq(mnsPlayers.leagueId, league.id),
           eq(mnsPlayers.slot, 'active'),
           inArray(mnsPlayers.teamId, playing),
-          eq(mnsPlayers.injuryStatus, 'Out')
+          eq(mnsSportPlayers.injuryStatus, 'Out')
         )
       )
     const flagged = players.filter((p) => p.teamCode && games.has(p.teamCode))

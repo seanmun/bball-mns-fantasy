@@ -10,6 +10,7 @@ import {
   mnsTeamOwners,
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { computeStandings } from '../../../src/lib/season/score.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 import { setRookiePicksSchema, parseBody } from '../../_validation.js'
@@ -204,6 +205,10 @@ async function handlePost(
       }
 
       // First-tap-wins on the player, same guard as the waiver wire.
+      const [picked] = await leaguePlayers(db)
+        .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
+        .limit(1)
+      if (!picked) return res.status(404).json({ error: 'That player is not in this league.' })
       const took = await db
         .update(mnsPlayers)
         .set({ teamId: pick.teamId, slot: 'active' })
@@ -214,13 +219,13 @@ async function handlePost(
             sql`${mnsPlayers.teamId} is null`
           )
         )
-        .returning({ id: mnsPlayers.id, name: mnsPlayers.name })
+        .returning({ id: mnsPlayers.id })
       if (took.length === 0) {
         return res.status(409).json({ error: 'That player is gone — pick another.' })
       }
       await db
         .update(mnsRookieDraftPicks)
-        .set({ playerId, playerName: took[0].name, updatedAt: new Date() })
+        .set({ playerId, playerName: picked.name, updatedAt: new Date() })
         .where(eq(mnsRookieDraftPicks.id, pick.id))
 
       // Last pick made → the year rolls forward.
@@ -242,7 +247,7 @@ async function handlePost(
           .set({ leaguePhase: nextPhase, updatedAt: new Date() })
           .where(eq(mnsLeagues.id, leagueId))
       }
-      return res.status(200).json({ ok: true, picked: took[0].name, nextPhase })
+      return res.status(200).json({ ok: true, picked: picked.name, nextPhase })
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` })

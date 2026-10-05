@@ -2,7 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
 import { eq } from 'drizzle-orm'
-import { mnsPlayers } from '../../../src/lib/db/schema.js'
+import {
+  mnsPlayers,
+  mnsSportPlayers,
+} from '../../../src/lib/db/schema.js'
 import { averagesForRanges } from '../../../src/lib/season/stats.js'
 import { logger } from '../../_logger.js'
 
@@ -20,8 +23,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ranges = await averagesForRanges(db, leagueId)
     // CAT$ — Cat Score per $1M of salary, the value-density number.
     const salaries = await db
-      .select({ id: mnsPlayers.id, salary: mnsPlayers.salary })
-      .from(mnsPlayers)
+      .select({ id: mnsPlayers.id, salary: mnsSportPlayers.salary })
+      .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
       .where(eq(mnsPlayers.leagueId, leagueId))
     const salaryOf = new Map(salaries.map((p) => [p.id, p.salary ?? 0]))
     for (const key of ['season', 'last30', 'last10', 'lastSeason'] as const) {

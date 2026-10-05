@@ -1,5 +1,11 @@
 import { and, eq, inArray, lte, sql } from 'drizzle-orm'
-import { mnsPlayers, mnsTeams, mnsTransactions, mnsWaiverClaims } from '../db/schema.js'
+import {
+  mnsPlayers,
+  mnsTeams,
+  mnsTransactions,
+  mnsWaiverClaims,
+  mnsSportPlayers,
+} from '../db/schema.js'
 import { easternToday } from './score.js'
 import { capUsed, rosterSpots } from './roster.js'
 import { sport } from '../sport/index.js'
@@ -177,8 +183,8 @@ export async function processWaivers(
   }
 
   const players = await db
-    .select({ id: mnsPlayers.id, name: mnsPlayers.name, teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
-    .from(mnsPlayers)
+    .select({ id: mnsPlayers.id, name: mnsSportPlayers.name, teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, slot: mnsPlayers.slot })
+    .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
     .where(eq(mnsPlayers.leagueId, leagueId))
   const byId = new Map(players.map((p: { id: string }) => [p.id, p]))
 

@@ -1,5 +1,6 @@
-import { eq, sql } from 'drizzle-orm'
-import { mnsPlayerStatLines } from '../db/schema.js'
+import { eq } from 'drizzle-orm'
+import { mnsPlayers } from '../db/schema.js'
+import { leagueStatLines } from '../players/statLines.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = any
@@ -22,36 +23,32 @@ export interface SeasonAvg {
 // Season averages from the real box scores on file — one query, one
 // map, shared by every surface that shows a player (wire, team page).
 export async function seasonAverages(db: Db, leagueId: string): Promise<Map<string, SeasonAvg>> {
-  const agg = await db
-    .select({
-      playerId: mnsPlayerStatLines.playerId,
-      gp: sql<number>`count(*) filter (where ${mnsPlayerStatLines.min} > 0)`,
-      pts: sql<number>`coalesce(sum(${mnsPlayerStatLines.pts}), 0)`,
-      reb: sql<number>`coalesce(sum(${mnsPlayerStatLines.reb}), 0)`,
-      ast: sql<number>`coalesce(sum(${mnsPlayerStatLines.ast}), 0)`,
-      stl: sql<number>`coalesce(sum(${mnsPlayerStatLines.stl}), 0)`,
-      blk: sql<number>`coalesce(sum(${mnsPlayerStatLines.blk}), 0)`,
-      tpm: sql<number>`coalesce(sum(${mnsPlayerStatLines.tpm}), 0)`,
-      fgm: sql<number>`coalesce(sum(${mnsPlayerStatLines.fgm}), 0)`,
-      fga: sql<number>`coalesce(sum(${mnsPlayerStatLines.fga}), 0)`,
-    })
-    .from(mnsPlayerStatLines)
-    .where(eq(mnsPlayerStatLines.leagueId, leagueId))
-    .groupBy(mnsPlayerStatLines.playerId)
-
+  const rows = (await leagueStatLines(db).where(eq(mnsPlayers.leagueId, leagueId))) as Array<{
+    playerId: string
+    min: number; pts: number; reb: number; ast: number; stl: number; blk: number; tpm: number; fgm: number; fga: number
+  }>
+  type Acc = { gp: number; pts: number; reb: number; ast: number; stl: number; blk: number; tpm: number; fgm: number; fga: number }
+  const acc = new Map<string, Acc>()
+  for (const r of rows) {
+    const a = acc.get(r.playerId) ?? { gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tpm: 0, fgm: 0, fga: 0 }
+    if (r.min > 0) a.gp++
+    a.pts += r.pts; a.reb += r.reb; a.ast += r.ast; a.stl += r.stl; a.blk += r.blk
+    a.tpm += r.tpm; a.fgm += r.fgm; a.fga += r.fga
+    acc.set(r.playerId, a)
+  }
   const per = (v: number, gp: number) => (gp > 0 ? Math.round((v / gp) * 10) / 10 : 0)
   return new Map(
-    agg.map((a: Record<string, number | string>) => [
-      String(a.playerId),
+    [...acc.entries()].map(([id, a]) => [
+      id,
       {
-        gp: Number(a.gp),
-        ppg: per(Number(a.pts), Number(a.gp)),
-        rpg: per(Number(a.reb), Number(a.gp)),
-        apg: per(Number(a.ast), Number(a.gp)),
-        spg: per(Number(a.stl), Number(a.gp)),
-        bpg: per(Number(a.blk), Number(a.gp)),
-        tpg: per(Number(a.tpm), Number(a.gp)),
-        fgPct: Number(a.fga) > 0 ? Math.round((Number(a.fgm) / Number(a.fga)) * 1000) / 10 : 0,
+        gp: a.gp,
+        ppg: per(a.pts, a.gp),
+        rpg: per(a.reb, a.gp),
+        apg: per(a.ast, a.gp),
+        spg: per(a.stl, a.gp),
+        bpg: per(a.blk, a.gp),
+        tpg: per(a.tpm, a.gp),
+        fgPct: a.fga > 0 ? Math.round((a.fgm / a.fga) * 1000) / 10 : 0,
       },
     ])
   )
@@ -68,25 +65,7 @@ export async function averagesForRanges(
   leagueId: string,
   now = new Date()
 ): Promise<Record<StatRange, Record<string, SeasonAvg>>> {
-  const rows = (await db
-    .select({
-      playerId: mnsPlayerStatLines.playerId,
-      date: mnsPlayerStatLines.date,
-      min: mnsPlayerStatLines.min,
-      pts: mnsPlayerStatLines.pts,
-      reb: mnsPlayerStatLines.reb,
-      ast: mnsPlayerStatLines.ast,
-      stl: mnsPlayerStatLines.stl,
-      blk: mnsPlayerStatLines.blk,
-      tpm: mnsPlayerStatLines.tpm,
-      fgm: mnsPlayerStatLines.fgm,
-      fga: mnsPlayerStatLines.fga,
-      ftm: mnsPlayerStatLines.ftm,
-      fta: mnsPlayerStatLines.fta,
-      tov: mnsPlayerStatLines.tov,
-    })
-    .from(mnsPlayerStatLines)
-    .where(eq(mnsPlayerStatLines.leagueId, leagueId))) as Array<{
+  const rows = (await leagueStatLines(db).where(eq(mnsPlayers.leagueId, leagueId))) as Array<{
     playerId: string
     date: string
     min: number

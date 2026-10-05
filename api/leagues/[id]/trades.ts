@@ -10,7 +10,9 @@ import {
   mnsTeams,
   mnsTradeProposals,
   mnsTradeProposalResponses,
+  mnsSportPlayers,
 } from '../../../src/lib/db/schema.js'
+import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
 import { isTradeDeadlinePassed } from '../../../src/rules/tradeRules.js'
 import { pickBoard as sharedPickBoard } from '../../../src/lib/season/picks.js'
 import { logTransaction } from '../../../src/lib/season/waivers.js'
@@ -104,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const givePlayerIds = (req.body?.givePlayerIds ?? []) as string[]
       const getPlayerIds = (req.body?.getPlayerIds ?? []) as string[]
       if (!toTeamId) return res.status(400).json({ error: 'toTeamId required.' })
-      const all = await db.select().from(mnsPlayers).where(eq(mnsPlayers.leagueId, leagueId))
+      const all = await leaguePlayers(db).where(eq(mnsPlayers.leagueId, leagueId))
       const byId = new Map(all.map((p) => [p.id, p]))
       const { averagesForRanges } = await import('../../../src/lib/season/stats.js')
       const season = (await averagesForRanges(db, leagueId)).season
@@ -156,9 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (givePlayerIds.length + givePickIds.length === 0 || getPlayerIds.length + getPickIds.length === 0) {
         return res.status(400).json({ error: 'A trade needs something on both sides.' })
       }
-      const players = await db
-        .select()
-        .from(mnsPlayers)
+      const players = await leaguePlayers(db)
         .where(
           and(
             eq(mnsPlayers.leagueId, leagueId),
@@ -306,8 +306,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const ids = playerAssets.map((a) => a.id)
       const players = ids.length
         ? await db
-            .select({ id: mnsPlayers.id, teamId: mnsPlayers.teamId, salary: mnsPlayers.salary })
-            .from(mnsPlayers)
+            .select({ id: mnsPlayers.id, teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary })
+            .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
             .where(and(eq(mnsPlayers.leagueId, leagueId), inArray(mnsPlayers.id, ids)))
         : []
       const byId = new Map(players.map((p) => [p.id, p]))
@@ -333,7 +333,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const activeSize = config.roster?.activeSize ?? 10
       const allForCount = await db
         .select({ teamId: mnsPlayers.teamId, slot: mnsPlayers.slot })
-        .from(mnsPlayers)
+        .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
         .where(eq(mnsPlayers.leagueId, leagueId))
       const nonIr = (teamId: string) =>
         rosterSpots(allForCount, teamId).length
@@ -352,8 +352,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Hard-cap check for both sides, same rule the waiver wire uses.
       if (config.cap?.enabled) {
         const all = await db
-          .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
-          .from(mnsPlayers)
+          .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, slot: mnsPlayers.slot })
+          .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
           .where(eq(mnsPlayers.leagueId, leagueId))
         for (const teamId of involved) {
           const current = capUsed(all, teamId)

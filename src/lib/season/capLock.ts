@@ -1,5 +1,10 @@
 import { eq } from 'drizzle-orm'
-import { mnsNotifyLog, mnsPlayers, mnsTeams } from '../db/schema.js'
+import {
+  mnsNotifyLog,
+  mnsPlayers,
+  mnsTeams,
+  mnsSportPlayers,
+} from '../db/schema.js'
 import { capExposure, computeApronFees, type CapExposure } from '../../rules/capRules.js'
 import { bookApronDues, teamFees, type FeeEntry } from './fees.js'
 import { capUsed } from './roster.js'
@@ -35,8 +40,8 @@ export async function teamExposures(
   const out = new Map<string, TeamExposure>()
   if (!apronsConfigured(config)) return out
   const players = (await db
-    .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
-    .from(mnsPlayers)
+    .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, slot: mnsPlayers.slot })
+    .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
     .where(eq(mnsPlayers.leagueId, leagueId))) as Array<{
     teamId: string | null
     salary: number | null
@@ -88,8 +93,8 @@ export async function bookCapDuesAtTip(
   if (claimed.length === 0) return { booked: [] }
 
   const players = (await db
-    .select({ teamId: mnsPlayers.teamId, salary: mnsPlayers.salary, slot: mnsPlayers.slot })
-    .from(mnsPlayers)
+    .select({ teamId: mnsPlayers.teamId, salary: mnsSportPlayers.salary, slot: mnsPlayers.slot })
+    .from(mnsPlayers).innerJoin(mnsSportPlayers, eq(mnsSportPlayers.id, mnsPlayers.sportPlayerId))
     .where(eq(mnsPlayers.leagueId, league.id))) as Array<{
     teamId: string | null
     salary: number | null

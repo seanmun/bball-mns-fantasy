@@ -77,6 +77,27 @@ if (apply && links.length) {
   console.log(`wrote ${links.length} links`)
 }
 
+// 2b. League players no feed knows any more (retired, cut, off every
+// roster) keep their own identity: a sport row is made from the league
+// row — one per salary-sheet slug, shared across leagues — and linked.
+if (apply && unmatched.length) {
+  const rows = await q<{ id: string; name: string; position: string; team_code: string; salary: string; external_ids: { hhs?: string } }>(
+    `select id, name, position, team_code, salary, external_ids from ${schema}.players where sport_player_id is null`
+  )
+  let made = 0
+  for (const r of rows) {
+    const sportId = r.external_ids?.hhs ? `hhs:${r.external_ids.hhs}` : `legacy:${r.id}`
+    await q(
+      `insert into ${schema}.sport_players (id, name, team_code, position, presence, salary, salary_source, salary_season_year, external_ids)
+       values ($1, $2, $3, $4, 'absent', $5, $6, $7, $8) on conflict (id) do nothing`,
+      [sportId, r.name, r.team_code ?? '', r.position || 'F', Number(r.salary) || 0, r.external_ids?.hhs ? 'herhoopstats' : 'unknown', sport.calendar.seasonYear, JSON.stringify(r.external_ids ?? {})]
+    )
+    await q(`update ${schema}.players set sport_player_id = $1 where id = $2`, [sportId, r.id])
+    made++
+  }
+  console.log(`made sport rows for and linked ${made} players no feed knows`)
+}
+
 // 3. Stat lines: league lines → sport lines through the link.
 const [{ n: lineCount }] = await q<{ n: number }>(
   `select count(*)::int as n from ${schema}.player_stat_lines l join ${schema}.players p on p.id = l.player_id where p.sport_player_id is not null`

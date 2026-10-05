@@ -72,8 +72,7 @@ export const WNBA_LEAGUE_PRESET: LeagueConfig = {
     playoffWeeks: 3,
     playoffByeTeams: 2,
     consolationWeeks: 0,
-    combineCup: false,
-    combineAllStar: true,
+    combinedWeeks: [],
     extendFirstWeek: false,
   },
   prizePool: {
@@ -114,7 +113,7 @@ export const wnba: SportAdapter = {
   // ESPN publishes no WNBA contracts; Her Hoop Stats does.
   salary: { source: 'herhoopstats' },
   positions: { feed: ['G', 'F', 'C'], defaultShape: [] },
-  calendar: { seasonYear: 2026, seasonStart: '2026-05-11' },
+  calendar: { seasonYear: 2026, seasonStart: '2026-05-11', seasonEnd: '2026-10-18' },
   preset: WNBA_LEAGUE_PRESET,
   branding: {
     identity: {

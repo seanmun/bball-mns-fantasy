@@ -95,8 +95,10 @@ export interface LeagueConfig {
     playoffWeeks: number
     playoffByeTeams: number
     consolationWeeks: number
-    combineCup: boolean
-    combineAllStar: boolean
+    // Calendar weeks folded into one matchup week — the Cup final week,
+    // the All-Star break, a FIBA window. Suggested from the sport's
+    // real schedule at setup; the commissioner decides.
+    combinedWeeks: Array<{ calendarWeeks: number[]; label: string }>
     extendFirstWeek: boolean
   }
   prizePool: {

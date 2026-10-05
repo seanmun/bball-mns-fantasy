@@ -47,7 +47,7 @@ export async function generateSeasonSchedule(
     .orderBy(mnsTeams.createdAt)
   const teamIds = teams.map((t: { id: string }) => t.id)
 
-  const weeks = generateWeeks({ leagueId, config })
+  const weeks = generateWeeks({ leagueId, config, combinedWeeks: config.schedule.combinedWeeks ?? [] })
   if (weeks.length === 0) {
     throw new Error('League config has no season.startDate — set it before starting the season')
   }

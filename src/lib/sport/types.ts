@@ -36,6 +36,9 @@ export interface SportAdapter {
   calendar: {
     seasonYear: number
     seasonStart: string // YYYY-MM-DD, first regular-season day
+    // Last date the sport pass pulls game counts for — past the regular
+    // season so playoff weeks show up too.
+    seasonEnd: string
     preseasonStart?: string
   }
   // The config a new league starts from. Commissioners override any

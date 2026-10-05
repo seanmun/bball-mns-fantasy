@@ -6,13 +6,13 @@ import {
   mnsPlayers,
   mnsSportPlayers,
 } from '../../../../src/lib/db/schema.js'
-import { leaguePlayers } from '../../../../src/lib/players/leaguePlayers.js'
+import { leaguePlayers, type LeaguePlayer } from '../../../../src/lib/players/leaguePlayers.js'
 import { logger } from '../../../_logger.js'
 import { seasonAverages } from '../../../../src/lib/season/stats.js'
 import type { Player, ExternalIds, RookieDraftInfo, MigrationSource, PlayerSlot } from '../../../../src/types/player.js'
 import type { Sport } from '../../../../src/types/leagueConfig.js'
 
-function mapPlayerRow(row: typeof mnsPlayers.$inferSelect): Player {
+function mapPlayerRow(row: LeaguePlayer): Player {
   return {
     id: row.id,
     externalIds: (row.externalIds ?? {}) as ExternalIds,

@@ -243,6 +243,19 @@ export const mnsSportStatLines = gameSchema.table(
   (t) => [primaryKey({ columns: [t.playerId, t.date] }), index('idx_sport_stat_lines_date').on(t.date)]
 )
 
+// The sport's calendar as ESPN publishes it: how many games on each
+// date and which clubs play. Summed into any league's own week
+// boundaries at read time, this is what tells a commissioner at setup
+// that the Cup final week has one game per team, or that the FIBA
+// break is two weeks of nothing.
+export const mnsSportGameDays = gameSchema.table('sport_game_days', {
+  date: text('date').primaryKey(), // YYYY-MM-DD Eastern
+  games: integer('games').notNull().default(0),
+  // Team codes (ours) with a game that day.
+  teams: text('teams').array().notNull().default(sql`'{}'::text[]`),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // When each sport pass last ran — rosters and salaries once a day,
 // box scores and injuries every tick — one row per kind per day.
 export const mnsSportSync = gameSchema.table(

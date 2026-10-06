@@ -1,4 +1,5 @@
 import { sport } from '../lib/sport/index'
+import { SeasonCalendar } from '../components/SeasonCalendar'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
@@ -174,6 +175,19 @@ export function AdminLeague() {
                 ...config,
                 schedule: { ...config.schedule, playoffByeTeams: Number(v) },
               })
+            }
+          />
+          <Row label="The season, week by week">
+            <span className="text-xs text-gray-500">from the real schedule</span>
+          </Row>
+          <SeasonCalendar
+            leagueId={currentLeague.id}
+            startDate={config.season.startDate}
+            weeks={config.season.weeks}
+            playoffWeeks={config.schedule.playoffWeeks}
+            combined={config.schedule.combinedWeeks ?? []}
+            onChange={(combinedWeeks) =>
+              setConfig({ ...config, schedule: { ...config.schedule, combinedWeeks } })
             }
           />
         </Section>

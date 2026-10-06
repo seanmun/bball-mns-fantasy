@@ -102,8 +102,7 @@ export const NBA_LEAGUE_PRESET: LeagueConfig = {
     playoffWeeks: 3,
     playoffByeTeams: 2,
     consolationWeeks: 0,
-    combineCup: false,
-    combineAllStar: true,
+    combinedWeeks: [],
     extendFirstWeek: false,
   },
   prizePool: {
@@ -150,7 +149,7 @@ export const nba: SportAdapter = {
     feed: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'],
     defaultShape: NBA_LEAGUE_PRESET.roster.positionSlots ?? [],
   },
-  calendar: { seasonYear: 2027, seasonStart: '2026-10-20', preseasonStart: '2026-10-03' },
+  calendar: { seasonYear: 2027, seasonStart: '2026-10-20', seasonEnd: '2027-05-02', preseasonStart: '2026-10-03' },
   preset: NBA_LEAGUE_PRESET,
   branding: {
     identity: {

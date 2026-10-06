@@ -171,3 +171,152 @@ export function computePlayoffDefaults(playoffTeams: number): {
   const byes = bracketSize - playoffTeams
   return { weeks, byes }
 }
+
+
+// ── The season calendar, in a league's own weeks ───────────────────
+
+export interface GameDay {
+  date: string
+  games: number
+  teams: string[]
+}
+
+export interface CalendarWeek {
+  // 1-based league week number (calendar week, before any combining).
+  week: number
+  startDate: string
+  endDate: string
+  games: number
+  // Mean games per club over the clubs the season knows.
+  avgPerTeam: number
+  // Clubs with at most one game this week.
+  teamsLight: number
+  zeroDays: string[]
+}
+
+const shift = (date: string, days: number) =>
+  new Date(new Date(`${date}T12:00:00Z`).getTime() + days * 86400000).toISOString().slice(0, 10)
+
+// Sum per-day counts into weeks that start on the league's own start
+// date (seven days each), for the regular season plus the playoffs.
+export function summarizeWeeks(
+  days: GameDay[],
+  startDate: string,
+  numWeeks: number
+): CalendarWeek[] {
+  const byDate = new Map(days.map((d) => [d.date, d]))
+  // The clubs that really play the season: a code that shows up only a
+  // handful of times is an All-Star squad or a "TBD" playoff slot, and
+  // must not dilute the per-club average.
+  const seen = new Map<string, number>()
+  for (const d of days) for (const t of d.teams) seen.set(t, (seen.get(t) ?? 0) + 1)
+  const most = Math.max(0, ...seen.values())
+  const clubs = new Set([...seen.entries()].filter(([, n]) => n >= most * 0.25).map(([t]) => t))
+  const nClubs = Math.max(1, clubs.size)
+  const out: CalendarWeek[] = []
+  for (let i = 0; i < numWeeks; i++) {
+    const start = shift(startDate, i * 7)
+    const end = shift(start, 6)
+    let games = 0
+    const perClub = new Map<string, number>()
+    const zeroDays: string[] = []
+    for (let k = 0; k < 7; k++) {
+      const date = shift(start, k)
+      const d = byDate.get(date)
+      if (!d || d.games === 0) zeroDays.push(date)
+      if (!d) continue
+      games += d.games
+      for (const t of d.teams) if (clubs.has(t)) perClub.set(t, (perClub.get(t) ?? 0) + 1)
+    }
+    const appearances = [...perClub.values()].reduce((a, b) => a + b, 0)
+    const teamsLight = nClubs - [...perClub.values()].filter((n) => n >= 2).length
+    out.push({
+      week: i + 1,
+      startDate: start,
+      endDate: end,
+      games,
+      avgPerTeam: Math.round((appearances / nClubs) * 100) / 100,
+      teamsLight,
+      zeroDays,
+    })
+  }
+  return out
+}
+
+export interface WeekSuggestion {
+  kind: 'combine' | 'no_games'
+  calendarWeeks: number[]
+  label: string
+  reason: string
+}
+
+// A week is LIGHT when its games per club fall well under the season's
+// typical week (under 70% of the median). Consecutive light weeks fold
+// together; a lone light week folds into its emptier neighbour — only
+// within the regular season (the first `regularWeeks`). Weeks with no
+// games at all are never folded, playoff weeks included: they are a
+// warning — end the regular season before them or run the playoffs
+// after. A championship scheduled into a blackout is the one mistake
+// this exists to catch.
+export function suggestCombinedWeeks(weeks: CalendarWeek[], regularWeeks = weeks.length): WeekSuggestion[] {
+  const played = weeks.filter((w) => w.games > 0).map((w) => w.avgPerTeam).sort((a, b) => a - b)
+  if (played.length === 0) return []
+  const median = played[Math.floor(played.length / 2)]
+  const isLight = (w: CalendarWeek) => w.week <= regularWeeks && w.games > 0 && w.avgPerTeam < median * 0.7
+  const isZero = (w: CalendarWeek) => w.games === 0
+  const fmt = (d: string) => {
+    const [, m, day] = d.split('-')
+    return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m) - 1]} ${Number(day)}`
+  }
+  const span = (a: CalendarWeek, b: CalendarWeek) => `${fmt(a.startDate)} – ${fmt(b.endDate)}`
+
+  const out: WeekSuggestion[] = []
+  const taken = new Set<number>()
+  let i = 0
+  while (i < weeks.length) {
+    const w = weeks[i]
+    if (isZero(w)) {
+      let j = i
+      while (j + 1 < weeks.length && isZero(weeks[j + 1])) j++
+      const run = weeks.slice(i, j + 1)
+      out.push({
+        kind: 'no_games',
+        calendarWeeks: run.map((x) => x.week),
+        label: `No games ${span(run[0], run[run.length - 1])}`,
+        reason:
+          run.length === 1
+            ? 'A week with no games cannot be a matchup week — end the regular season before it, or schedule the playoffs after it.'
+            : `${run.length} straight weeks with no games — end the regular season before them, or schedule the playoffs after.`,
+      })
+      i = j + 1
+      continue
+    }
+    if (isLight(w) && !taken.has(w.week)) {
+      let j = i
+      while (j + 1 < weeks.length && isLight(weeks[j + 1])) j++
+      let run = weeks.slice(i, j + 1)
+      if (run.length === 1) {
+        // Fold into the emptier playable neighbour.
+        const prev = i > 0 && !isZero(weeks[i - 1]) && !taken.has(weeks[i - 1].week) ? weeks[i - 1] : null
+        const next =
+          i + 1 < weeks.length && weeks[i + 1].week <= regularWeeks && !isZero(weeks[i + 1]) ? weeks[i + 1] : null
+        const partner =
+          prev && next ? (prev.games <= next.games ? prev : next) : (prev ?? next)
+        if (partner) run = [w, partner].sort((a, b) => a.week - b.week)
+      }
+      if (run.length >= 2) {
+        for (const x of run) taken.add(x.week)
+        out.push({
+          kind: 'combine',
+          calendarWeeks: run.map((x) => x.week),
+          label: `Combine weeks ${run[0].week}–${run[run.length - 1].week} (${span(run[0], run[run.length - 1])})`,
+          reason: `${run.map((x) => `${x.avgPerTeam}`).join(' and ')} games per club, against ${median} in a normal week.`,
+        })
+      }
+      i = j + 1
+      continue
+    }
+    i++
+  }
+  return out
+}

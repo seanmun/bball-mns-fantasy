@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm'
-import { mnsSportPlayers, mnsSportStatLines, mnsSportSync } from '../db/schema.js'
+import { mnsSportGameDays, mnsSportPlayers, mnsSportStatLines, mnsSportSync } from '../db/schema.js'
 import { sport } from '../sport/index.js'
 import {
   ESPN_BASE,
@@ -45,6 +45,9 @@ interface Known {
   espnId: string | null
   name: string
 }
+
+const weekKey = (today: string) =>
+  `${today.slice(0, 4)}-w${Math.ceil((Date.parse(today) - Date.parse(`${today.slice(0, 4)}-01-01`)) / (7 * 86400000))}`
 
 async function loadKnown(db: Db): Promise<{ byEspn: Map<string, Known>; byName: Map<string, Known> }> {
   const rows = (await db
@@ -336,15 +339,86 @@ export async function syncStatLines(db: Db, date: string, now = new Date()) {
   return { games: events.length, written, created }
 }
 
+// The calendar: game counts per date from the scoreboard, one month
+// per call so a tick never waits on the whole season. Ten requests at
+// a time; a failed day keeps its old row.
+export async function syncCalendarMonth(db: Db, month: string, now = new Date()) {
+  const [y, m] = month.split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1, 1))
+  const last = new Date(Date.UTC(y, m, 0))
+  const from = sport.calendar.seasonStart
+  const to = sport.calendar.seasonEnd
+  const dates: string[] = []
+  for (let d = first; d <= last; d = new Date(d.getTime() + 86400000)) {
+    const iso = d.toISOString().slice(0, 10)
+    if (iso >= from && iso <= to) dates.push(iso)
+  }
+  let written = 0
+  let failed = 0
+  for (let i = 0; i < dates.length; i += 10) {
+    const batch = dates.slice(i, i + 10)
+    const results = await Promise.all(
+      batch.map(async (date) => {
+        try {
+          const board = await fetchJson<{
+            events?: Array<{ competitions?: Array<{ competitors?: Array<{ team: { abbreviation: string } }> }> }>
+          }>(`${ESPN_SCOREBOARD}?dates=${date.replace(/-/g, '')}`)
+          const events = board.events ?? []
+          const teams = new Set<string>()
+          for (const e of events) for (const c of e.competitions?.[0]?.competitors ?? []) teams.add(ourCode(c.team.abbreviation))
+          return { date, games: events.length, teams: [...teams] }
+        } catch {
+          return null
+        }
+      })
+    )
+    for (const r of results) {
+      if (!r) {
+        failed++
+        continue
+      }
+      await db
+        .insert(mnsSportGameDays)
+        .values({ date: r.date, games: r.games, teams: r.teams, updatedAt: now })
+        .onConflictDoUpdate({ target: mnsSportGameDays.date, set: { games: r.games, teams: r.teams, updatedAt: now } })
+      written++
+    }
+  }
+  return { month, days: dates.length, written, failed }
+}
+
+// Every month of the season, in order, oldest claim first — one month
+// per tick, refreshed each week.
+export async function syncCalendar(db: Db, now = new Date()) {
+  const months: string[] = []
+  const [sy, sm] = sport.calendar.seasonStart.split('-').map(Number)
+  const [ey, em] = sport.calendar.seasonEnd.split('-').map(Number)
+  for (let y = sy, m = sm; y < ey || (y === ey && m <= em); m === 12 ? (y++, (m = 1)) : m++) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`)
+  }
+  const week = weekKey(easternToday(now))
+  for (const month of months) {
+    const key = `calendar:${month}:${week}`
+    if (!(await claim(db, 'calendar', key))) continue
+    try {
+      const r = await syncCalendarMonth(db, month, now)
+      await note(db, 'calendar', key, r)
+      return r
+    } catch (err) {
+      await release(db, 'calendar', key)
+      throw err
+    }
+  }
+  return { skipped: true as const }
+}
+
 export interface SportPassReport {
+  calendar?: Awaited<ReturnType<typeof syncCalendar>> | { error: string }
   rosters?: Awaited<ReturnType<typeof syncRosters>> | { skipped: true } | { error: string }
   salaries?: Awaited<ReturnType<typeof syncSalariesScraped>> | { skipped: true } | { error: string }
   injuries?: Awaited<ReturnType<typeof syncInjuries>> | { error: string }
   lines?: Record<string, Awaited<ReturnType<typeof syncStatLines>> | { error: string }>
 }
-
-const weekKey = (today: string) =>
-  `${today.slice(0, 4)}-w${Math.ceil((Date.parse(today) - Date.parse(`${today.slice(0, 4)}-01-01`)) / (7 * 86400000))}`
 
 // One sport pass per tick: the daily jobs claim their day, the live
 // jobs just run. A failing step is reported, never fatal to the rest.
@@ -378,6 +452,12 @@ export async function runSportPass(db: Db, now = new Date()): Promise<SportPassR
     } else {
       report.salaries = { skipped: true }
     }
+  }
+
+  try {
+    report.calendar = await syncCalendar(db, now)
+  } catch (err) {
+    report.calendar = { error: err instanceof Error ? err.message : String(err) }
   }
 
   try {

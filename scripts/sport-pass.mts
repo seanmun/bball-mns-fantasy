@@ -8,7 +8,7 @@
 import { config } from 'dotenv'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
-import { syncInjuries, syncRosters, syncSalariesScraped, syncStatLines } from '../src/lib/season/sportSync.js'
+import { syncCalendarMonth, syncInjuries, syncRosters, syncSalariesScraped, syncStatLines } from '../src/lib/season/sportSync.js'
 import { easternToday } from '../src/lib/season/score.js'
 import { sport } from '../src/lib/sport/index.js'
 
@@ -17,6 +17,21 @@ const client = neon(process.env.DATABASE_URL!)
 const db = drizzle(client)
 const now = new Date()
 const dates = process.argv.slice(2).filter((a) => /^\d{4}-\d{2}-\d{2}$/.test(a))
+// --calendar: pull every month of the season's game counts now (the
+// tick does one month per run) and stop.
+if (process.argv.includes('--calendar')) {
+  const [sy, sm] = sport.calendar.seasonStart.split('-').map(Number)
+  const [ey, em] = sport.calendar.seasonEnd.split('-').map(Number)
+  for (let y = sy, m = sm; y < ey || (y === ey && m <= em); m === 12 ? (y++, (m = 1)) : m++) {
+    const month = `${y}-${String(m).padStart(2, '0')}`
+    console.log('calendar', JSON.stringify(await syncCalendarMonth(db, month, now)))
+  }
+  const [c] = (await client.query(
+    `select count(*)::int as days, sum(games)::int as games, min(date) as first, max(date) as last from ${sport.schema}.sport_game_days`
+  )) as Record<string, unknown>[]
+  console.log('sport_game_days:', JSON.stringify(c))
+  process.exit(0)
+}
 if (dates.length === 0) dates.push(easternToday(new Date(now.getTime() - 86400000)), easternToday(now))
 
 console.log(`sport=${sport.key} schema=${sport.schema}`)

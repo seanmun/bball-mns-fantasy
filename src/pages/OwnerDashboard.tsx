@@ -13,6 +13,7 @@ import { StrategyDials } from '../components/StrategyDials'
 import { COUNTS_AGAINST_CAP, HOLDS_ROSTER_SPOT } from '../lib/season/roster'
 import { assignSlots } from '../lib/season/positions'
 import { playerLocked, tipClock } from '../lib/season/locks'
+import { penaltyRate } from '../rules/capRules'
 
 interface OwnerInfo {
   userId: string | null
@@ -492,7 +493,12 @@ export function OwnerDashboard() {
       <div className="min-w-0 lg:order-1">
       {currentLeague?.config.cap?.enabled ? (
         <CardCarousel pane={pane} onPane={setPane}>
-          <CapCard capUsed={capUsed} cap={currentLeague.config.cap} fees={currentLeague.config.fees} dues={fees?.dues ?? null} />
+          <CapCard
+            capUsed={capUsed}
+            cap={currentLeague.config.cap}
+            fees={{ ...currentLeague.config.fees, penaltyRatePerM: penaltyRate(currentLeague.config) }}
+            dues={fees?.dues ?? null}
+          />
           <FeesCard fees={fees} />
         </CardCarousel>
       ) : null}

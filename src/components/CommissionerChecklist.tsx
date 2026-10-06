@@ -59,6 +59,9 @@ export function CommissionerChecklist({
   const [setup, setSetup] = useState<LeagueSetup | null>(
     league.config.setup ?? null
   )
+  // A wrong first pick is not a dead end: the starting point can be
+  // changed until the season starts, and the steps simply re-read it.
+  const [changing, setChanging] = useState(false)
 
   const leagueId = league.id
 
@@ -75,11 +78,16 @@ export function CommissionerChecklist({
     void refresh()
   }, [refresh])
 
-  if (!setup) {
+  if (!setup || changing) {
     return (
       <ScenarioSelector
         league={league}
-        onSaved={(s) => setSetup(s)}
+        current={setup}
+        onSaved={(s) => {
+          setSetup(s)
+          setChanging(false)
+        }}
+        onCancel={setup ? () => setChanging(false) : undefined}
       />
     )
   }
@@ -102,9 +110,14 @@ export function CommissionerChecklist({
   return (
     <section className="mb-10">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">Commissioner Setup</h2>
+        <h2 className="text-xl font-bold">Commissioner setup</h2>
+        {!seasonStarted ? (
+          <button onClick={() => setChanging(true)} className="text-sm text-gray-400 hover:text-white">
+            Change starting point
+          </button>
+        ) : null}
         <Link to={`/league/${leagueId}/lm`} className="text-sm text-green-400 hover:text-green-300">
-          Open LM hub →
+          Commissioner tools →
         </Link>
       </div>
       <div className="bg-mns-card border border-gray-800 rounded-lg divide-y divide-gray-800">
@@ -123,7 +136,7 @@ export function CommissionerChecklist({
         <StaticStep
           n={num()}
           done={false}
-          title="Configure league rules"
+          title="League settings"
           description={`Override cap, fees, schedule, scoring — anything from the ${sport.leagueLabel} preset.`}
           cta="League settings"
           href={`/league/${leagueId}/lm/league`}
@@ -136,7 +149,7 @@ export function CommissionerChecklist({
             title="Assign players to teams"
             description={
               doneAssign
-                ? `${status?.playersAssignedCount} player${status?.playersAssignedCount === 1 ? '' : 's'} assigned to teams. Bulk CSV available from the roster manager.`
+                ? `${status?.playersAssignedCount} player${status?.playersAssignedCount === 1 ? '' : 's'} assigned to teams.`
                 : 'Search players from the pool, pick their team, set their prior keeper round.'
             }
             cta="Manage rosters"
@@ -194,10 +207,14 @@ export function CommissionerChecklist({
 
 function ScenarioSelector({
   league,
+  current,
   onSaved,
+  onCancel,
 }: {
   league: League
+  current: LeagueSetup | null
   onSaved: (s: LeagueSetup) => void
+  onCancel?: () => void
 }) {
   const { apiFetch } = useApi()
   const [saving, setSaving] = useState<string | null>(null)
@@ -224,23 +241,37 @@ function ScenarioSelector({
     <section className="mb-10">
       <h2 className="text-xl font-bold mb-1">Where is this league starting?</h2>
       <p className="text-sm text-gray-400 mb-4">
-        This decides which setup steps apply. You only pick it once.
+        This decides which setup steps apply. You can change it any time before the season starts.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {SCENARIOS.map((s) => (
-          <button
-            key={s.label}
-            onClick={() => choose(s)}
-            disabled={saving !== null}
-            className="text-left bg-mns-card border border-gray-800 hover:border-green-400/50 rounded-lg p-4 disabled:opacity-50 transition-colors"
-          >
-            <div className="font-semibold text-white mb-1">
-              {saving === s.label ? 'Saving…' : s.label}
-            </div>
-            <p className="text-sm text-gray-400">{s.description}</p>
-          </button>
-        ))}
+        {SCENARIOS.map((s) => {
+          const isCurrent =
+            !!current && current.entryPhase === s.setup.entryPhase && current.rosterSource === s.setup.rosterSource
+          return (
+            <button
+              key={s.label}
+              onClick={() => choose(s)}
+              disabled={saving !== null}
+              aria-pressed={isCurrent}
+              className={
+                'text-left bg-mns-card border rounded-lg p-4 disabled:opacity-50 transition-colors ' +
+                (isCurrent ? 'border-green-400' : 'border-gray-800 hover:border-green-400/50')
+              }
+            >
+              <div className="font-semibold text-white mb-1">
+                {saving === s.label ? 'Saving…' : s.label}
+                {isCurrent ? <span className="ml-2 text-xs text-green-400">current</span> : null}
+              </div>
+              <p className="text-sm text-gray-400">{s.description}</p>
+            </button>
+          )
+        })}
       </div>
+      {onCancel ? (
+        <button onClick={onCancel} className="mt-3 text-sm text-gray-400 hover:text-white">
+          Keep the current starting point
+        </button>
+      ) : null}
     </section>
   )
 }
@@ -411,7 +442,7 @@ function PopulatePoolStep({
         disabled={running}
         className="flex-shrink-0 px-3 py-1.5 text-sm bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-semibold rounded-lg transition-colors whitespace-nowrap"
       >
-        {running ? 'Scraping…' : done ? 'Re-scrape' : 'Populate pool'}
+        {running ? 'Loading…' : done ? 'Refresh pool' : 'Populate pool'}
       </button>
     </div>
   )

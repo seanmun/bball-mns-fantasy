@@ -47,7 +47,7 @@ export function CreateLeague() {
       <p className="text-gray-400 mb-8">
         Spin up a new {sport.appName} league. You become the commissioner. We'll set
         you up in the keeper phase with the standard {sport.leagueLabel} preset — every
-        knob is editable from the LM Hub once the league is live.
+        knob is editable from League settings once the league is live.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">

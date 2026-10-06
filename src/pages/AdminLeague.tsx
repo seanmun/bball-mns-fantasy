@@ -82,7 +82,7 @@ export function AdminLeague() {
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">League Settings</h1>
+          <h1 className="text-3xl font-bold">League settings</h1>
           <p className="text-gray-400 mt-1">
             {currentLeague.name} · {currentLeague.sport.toUpperCase()} ·{' '}
             {currentLeague.seasonYear}
@@ -97,9 +97,9 @@ export function AdminLeague() {
       </div>
 
       <p className="text-sm text-gray-400 mb-6">
-        Override anything from the {sport.leagueLabel} preset. Everything else stays at the
-        default. Changes apply immediately on save — they don't affect already-
-        locked rosters/keepers/fees.
+        The decisions a league is made of, starting from the {sport.leagueLabel} preset. The
+        rest sits under Advanced and stays at the preset until you change it. Saving applies
+        at once and never touches already-locked rosters, keepers or fees.
       </p>
 
       {error && (
@@ -325,72 +325,6 @@ export function AdminLeague() {
           />
         </Section>
 
-        <Section title="Draft">
-          <NumRow
-            label="Draft Rounds"
-            value={config.draft.rounds}
-            onChange={(v) =>
-              setConfig({ ...config, draft: { ...config.draft, rounds: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Rookie Draft Rounds"
-            value={config.draft.rookieRounds}
-            onChange={(v) =>
-              setConfig({ ...config, draft: { ...config.draft, rookieRounds: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Rookie Years Tracked (future tradeable picks)"
-            value={config.draft.rookieYearsTracked}
-            onChange={(v) =>
-              setConfig({
-                ...config,
-                draft: { ...config.draft, rookieYearsTracked: Number(v) },
-              })
-            }
-          />
-          <Row label="Rookie Order Method">
-            <select
-              value={config.draft.rookieOrderMethod}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  draft: {
-                    ...config.draft,
-                    rookieOrderMethod: e.target.value as
-                      | 'lottery'
-                      | 'manual'
-                      | 'season_record',
-                  },
-                })
-              }
-              className={inputClass}
-            >
-              <option value="manual">Manual (commissioner sets order)</option>
-              <option value="lottery">Lottery (weighted random by record)</option>
-              <option value="season_record">Season record (worst → best)</option>
-            </select>
-          </Row>
-          <Row label="Admin Pick Override">
-            <Toggle
-              value={config.draft.allowAdminOverride}
-              onChange={(v) =>
-                setConfig({
-                  ...config,
-                  draft: { ...config.draft, allowAdminOverride: v },
-                })
-              }
-            />
-          </Row>
-          <p className="text-xs text-gray-500 pt-2">
-            Future tradeable picks = {config.draft.rookieRounds} round
-            {config.draft.rookieRounds === 1 ? '' : 's'} × {config.draft.rookieYearsTracked} year
-            {config.draft.rookieYearsTracked === 1 ? '' : 's'} = {config.draft.rookieRounds * config.draft.rookieYearsTracked} pick
-            {config.draft.rookieRounds * config.draft.rookieYearsTracked === 1 ? '' : 's'} per team.
-          </p>
-        </Section>
-
         <Section title="Salary Cap (dollars)">
           <NumRow
             label="Base Cap"
@@ -400,24 +334,10 @@ export function AdminLeague() {
             }
           />
           <NumRow
-            label="Cap Floor (minimum spend, 0 = none)"
-            value={config.cap.floor}
-            onChange={(v) =>
-              setConfig({ ...config, cap: { ...config.cap, floor: Number(v) } })
-            }
-          />
-          <NumRow
             label="Hard Cap"
             value={config.cap.hardCap}
             onChange={(v) =>
               setConfig({ ...config, cap: { ...config.cap, hardCap: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Trade Cap Flex (± dollars)"
-            value={config.cap.tradeDelta}
-            onChange={(v) =>
-              setConfig({ ...config, cap: { ...config.cap, tradeDelta: Number(v) } })
             }
           />
           <Row label="Use Aprons">
@@ -519,39 +439,6 @@ export function AdminLeague() {
               })
             }
           />
-        </Section>
-
-        <Section title="Year to Year">
-          <Row label="Rookie Draft">
-            <Toggle
-              value={config.draft.rookieDraftEnabled ?? false}
-              onChange={(v) =>
-                setConfig({ ...config, draft: { ...config.draft, rookieDraftEnabled: v } })
-              }
-            />
-          </Row>
-          <p className="text-xs text-gray-500 -mt-1">
-            On: each new season opens with a rookie draft, then keepers, then the regular draft.
-            Off: keepers straight to one regular draft.
-          </p>
-          <NumRow
-            label="Keepers Allowed"
-            value={config.roster.maxKeepers}
-            onChange={(v) =>
-              setConfig({ ...config, roster: { ...config.roster, maxKeepers: Number(v) } })
-            }
-          />
-          <NumRow
-            label="Cap Increase per Year (%)"
-            value={config.cap.annualIncreasePct ?? 0}
-            onChange={(v) =>
-              setConfig({ ...config, cap: { ...config.cap, annualIncreasePct: Number(v) } })
-            }
-          />
-          <p className="text-xs text-gray-500 -mt-1">
-            Applied to floor, aprons and hard cap when you start the next season. You can still
-            hand-edit the ladder any time.
-          </p>
         </Section>
 
         <Section title="Prize Pool (tracked, never handled)">
@@ -682,6 +569,120 @@ export function AdminLeague() {
           </Row>
         </Section>
 
+        <Advanced>
+          <Section title="Cap details">
+          <NumRow
+            label="Cap Floor (minimum spend, 0 = none)"
+            value={config.cap.floor}
+            onChange={(v) =>
+              setConfig({ ...config, cap: { ...config.cap, floor: Number(v) } })
+            }
+          />
+          <NumRow
+            label="Trade Cap Flex (± dollars)"
+            value={config.cap.tradeDelta}
+            onChange={(v) =>
+              setConfig({ ...config, cap: { ...config.cap, tradeDelta: Number(v) } })
+            }
+          />
+          </Section>
+        <Section title="Draft">
+          <NumRow
+            label="Draft Rounds"
+            value={config.draft.rounds}
+            onChange={(v) =>
+              setConfig({ ...config, draft: { ...config.draft, rounds: Number(v) } })
+            }
+          />
+          <NumRow
+            label="Rookie Draft Rounds"
+            value={config.draft.rookieRounds}
+            onChange={(v) =>
+              setConfig({ ...config, draft: { ...config.draft, rookieRounds: Number(v) } })
+            }
+          />
+          <NumRow
+            label="Rookie Years Tracked (future tradeable picks)"
+            value={config.draft.rookieYearsTracked}
+            onChange={(v) =>
+              setConfig({
+                ...config,
+                draft: { ...config.draft, rookieYearsTracked: Number(v) },
+              })
+            }
+          />
+          <Row label="Rookie Order Method">
+            <select
+              value={config.draft.rookieOrderMethod}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  draft: {
+                    ...config.draft,
+                    rookieOrderMethod: e.target.value as
+                      | 'lottery'
+                      | 'manual'
+                      | 'season_record',
+                  },
+                })
+              }
+              className={inputClass}
+            >
+              <option value="manual">Manual (commissioner sets order)</option>
+              <option value="lottery">Lottery (weighted random by record)</option>
+              <option value="season_record">Season record (worst → best)</option>
+            </select>
+          </Row>
+          <Row label="Admin Pick Override">
+            <Toggle
+              value={config.draft.allowAdminOverride}
+              onChange={(v) =>
+                setConfig({
+                  ...config,
+                  draft: { ...config.draft, allowAdminOverride: v },
+                })
+              }
+            />
+          </Row>
+          <p className="text-xs text-gray-500 pt-2">
+            Future tradeable picks = {config.draft.rookieRounds} round
+            {config.draft.rookieRounds === 1 ? '' : 's'} × {config.draft.rookieYearsTracked} year
+            {config.draft.rookieYearsTracked === 1 ? '' : 's'} = {config.draft.rookieRounds * config.draft.rookieYearsTracked} pick
+            {config.draft.rookieRounds * config.draft.rookieYearsTracked === 1 ? '' : 's'} per team.
+          </p>
+        </Section>
+        <Section title="Year to Year">
+          <Row label="Rookie Draft">
+            <Toggle
+              value={config.draft.rookieDraftEnabled ?? false}
+              onChange={(v) =>
+                setConfig({ ...config, draft: { ...config.draft, rookieDraftEnabled: v } })
+              }
+            />
+          </Row>
+          <p className="text-xs text-gray-500 -mt-1">
+            On: each new season opens with a rookie draft, then keepers, then the regular draft.
+            Off: keepers straight to one regular draft.
+          </p>
+          <NumRow
+            label="Keepers Allowed"
+            value={config.roster.maxKeepers}
+            onChange={(v) =>
+              setConfig({ ...config, roster: { ...config.roster, maxKeepers: Number(v) } })
+            }
+          />
+          <NumRow
+            label="Cap Increase per Year (%)"
+            value={config.cap.annualIncreasePct ?? 0}
+            onChange={(v) =>
+              setConfig({ ...config, cap: { ...config.cap, annualIncreasePct: Number(v) } })
+            }
+          />
+          <p className="text-xs text-gray-500 -mt-1">
+            Applied to floor, aprons and hard cap when you start the next season. You can still
+            hand-edit the ladder any time.
+          </p>
+        </Section>
         <Section title="Keeper Rules">
           <Row label="Advance Rule">
             <select
@@ -732,6 +733,7 @@ export function AdminLeague() {
             />
           </Row>
         </Section>
+        </Advanced>
       </div>
 
       <div className="mt-8 flex items-center gap-3 sticky bottom-4">
@@ -760,6 +762,31 @@ function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="mns-page py-12 text-center text-gray-300">
       {children}
+    </div>
+  )
+}
+
+// The settings a commissioner rarely opens, behind one disclosure —
+// present, never in the way.
+function Advanced({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-lg border border-dashed border-gray-700">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-5 py-4 min-h-[3rem] text-left"
+      >
+        <span>
+          <b>Advanced</b>
+          <span className="block text-sm text-gray-400">
+            Cap floor and trade flex, draft mechanics, year-to-year growth, keeper round rules.
+          </span>
+        </span>
+        <span aria-hidden className="text-gray-400">{open ? '−' : '+'}</span>
+      </button>
+      {open ? <div className="space-y-6 px-5 pb-5">{children}</div> : null}
     </div>
   )
 }

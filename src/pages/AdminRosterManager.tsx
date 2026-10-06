@@ -133,6 +133,9 @@ export function AdminRosterManager() {
   const all = players ?? []
   const activeSize = currentLeague.config.roster?.activeSize ?? 10
   const cap = currentLeague.config.cap?.enabled ? currentLeague.config.cap : null
+  // Leagues with keepers carry each player's prior-year round in from
+  // the old platform here — the number that sets this year's cost.
+  const keepers = (currentLeague?.config.roster?.maxKeepers ?? 0) > 0
   const rosterOf = (teamId: string) => all.filter((p) => p.teamId === teamId)
   const spotsOf = (teamId: string) => rosterOf(teamId).filter((p) => HOLDS_ROSTER_SPOT(p.slot)).length
   const capOf = (teamId: string) =>
@@ -309,6 +312,26 @@ export function AdminRosterManager() {
                           .join(' · ')}
                       </span>
                     </span>
+                    {keepers ? (
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={20}
+                        value={p.keeperPriorYearRound ?? ''}
+                        placeholder="Rd"
+                        title="Round this player was kept or drafted in last year — sets this year's keeper cost"
+                        aria-label={`Prior keeper round for ${p.name}`}
+                        onChange={(e) =>
+                          patch(
+                            p.id,
+                            { keeperPriorYearRound: e.target.value === '' ? null : Number(e.target.value) },
+                            { keeperPriorYearRound: p.keeperPriorYearRound }
+                          )
+                        }
+                        className="shrink-0 w-14 text-xs px-2 py-1 min-h-[2.5rem] rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)] tabular-nums"
+                      />
+                    ) : null}
                     <select
                       value={p.slot ?? 'active'}
                       onChange={(e) =>
@@ -335,6 +358,7 @@ export function AdminRosterManager() {
                 {currentRoster.length === 0 ? (
                   <li className="text-sm text-[var(--color-muted-foreground)] px-3 py-4">
                     Empty — search on the left and press Enter to add.
+                    {keepers ? ' "Rd" is the round each player was kept or drafted in last year.' : ''}
                   </li>
                 ) : null}
               </ul>

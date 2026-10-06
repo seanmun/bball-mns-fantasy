@@ -256,6 +256,26 @@ export const mnsSportGameDays = gameSchema.table('sport_game_days', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// What the commissioner said to the whole league, and who got it. The
+// record the UI shows; the sending is best-effort per owner.
+export const mnsLeagueMessages = gameSchema.table(
+  'league_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    leagueId: text('league_id')
+      .notNull()
+      .references(() => mnsLeagues.id, { onDelete: 'cascade' }),
+    sentBy: text('sent_by').notNull(),
+    subject: text('subject').notNull(),
+    body: text('body').notNull(),
+    recipients: integer('recipients').notNull().default(0),
+    sent: integer('sent').notNull().default(0),
+    failed: jsonb('failed').$type<Array<{ to: string; error: string }>>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => [index('idx_league_messages_league').on(t.leagueId, t.createdAt)]
+)
+
 // When each sport pass last ran — rosters and salaries once a day,
 // box scores and injuries every tick — one row per kind per day.
 export const mnsSportSync = gameSchema.table(

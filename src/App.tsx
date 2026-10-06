@@ -58,6 +58,7 @@ const AdminLeague = lazy(() => import('./pages/AdminLeague').then((m) => ({ defa
 const AdminTeams = lazy(() => import('./pages/AdminTeams').then((m) => ({ default: m.AdminTeams })))
 const AdminRosterManager = lazy(() => import('./pages/AdminRosterManager').then((m) => ({ default: m.AdminRosterManager })))
 const AdminDraftSetup = lazy(() => import('./pages/AdminDraftSetup').then((m) => ({ default: m.AdminDraftSetup })))
+const AdminMessage = lazy(() => import('./pages/AdminMessage').then((m) => ({ default: m.AdminMessage })))
 const AdminDraftTest = lazy(() => import('./pages/AdminDraftTest').then((m) => ({ default: m.AdminDraftTest })))
 const AdminDraftPicks = lazy(() => import('./pages/AdminDraftPicks').then((m) => ({ default: m.AdminDraftPicks })))
 const AdminRookiePicks = lazy(() => import('./pages/AdminRookiePicks').then((m) => ({ default: m.AdminRookiePicks })))
@@ -210,6 +211,7 @@ export function App() {
             <Route path="/league/:leagueId/lm/teams" element={<ProtectedRoute><LeagueLayout><AdminTeams /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/rosters" element={<ProtectedRoute><LeagueLayout><AdminRosterManager /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-setup" element={<ProtectedRoute><LeagueLayout><AdminDraftSetup /></LeagueLayout></ProtectedRoute>} />
+            <Route path="/league/:leagueId/lm/message" element={<ProtectedRoute><LeagueLayout><AdminMessage /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-test" element={<ProtectedRoute><LeagueLayout><AdminDraftTest /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-picks" element={<ProtectedRoute><LeagueLayout><AdminDraftPicks /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/rookie-picks" element={<ProtectedRoute><LeagueLayout><AdminRookiePicks /></LeagueLayout></ProtectedRoute>} />

@@ -47,24 +47,23 @@ export function LeagueManagerHub() {
   if (league.commissionerId !== user?.id) {
     return (
       <EmptyState title="Commissioner only">
-        The LM tools belong to whoever runs the league.
+        These tools belong to whoever runs the league.
       </EmptyState>
     )
   }
 
   const base = `/league/${leagueId}/lm`
   const links: Array<[string, string, string]> = [
-    ['League settings', `${base}/league`, 'Cap, fees, schedule, scoring overrides'],
-    ['Teams & owners', `${base}/teams`, 'Add teams, invite owners'],
-    ['Rosters', `${base}/rosters`, 'Assign players by hand'],
-    ['Roster import', `${base}/roster-import`, 'CSV bulk import'],
+    ['League settings', `${base}/league`, 'Season, roster, cap, fees, scoring'],
+    ['Teams', `${base}/teams`, 'Add teams, invite owners'],
+    ['Rosters', `${base}/rosters`, 'Pick a team, search a player, place them'],
     ['Rookie picks', `${base}/rookie-picks`, 'The rookie draft board'],
     ['Draft setup', `${base}/draft-setup`, 'Pace, readiness, create the draft'],
   ]
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 pb-24">
-      <h1 className="text-3xl font-bold mb-1">League manager</h1>
+      <h1 className="text-3xl font-bold mb-1">Commissioner</h1>
       <p className="text-sm text-[var(--color-muted-foreground)] mb-6">{league.name}</p>
 
       {league.leaguePhase === 'champion' ? (

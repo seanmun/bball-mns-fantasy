@@ -103,7 +103,7 @@ export function LeagueHome() {
         >
           <span>
             <b className="text-green-400">Manage league</b>
-            <span className="block text-sm text-gray-400">Setup, teams, rosters, draft — the LM tools.</span>
+            <span className="block text-sm text-gray-400">Setup, teams, rosters, draft — the commissioner's tools.</span>
           </span>
           <span className="text-green-400 text-xl">→</span>
         </Link>
@@ -588,7 +588,7 @@ function TeamsSection({
           <p className="font-semibold text-gray-300 mb-1">No teams yet</p>
           <p className="text-sm">
             {isCommissioner
-              ? 'Add teams from the LM hub to get this league moving.'
+              ? 'Add teams from the commissioner tools to get this league moving.'
               : 'The commissioner is still setting up. Hang tight.'}
           </p>
         </div>

@@ -123,7 +123,7 @@ export function CommissionerChecklist({
         <StaticStep
           n={num()}
           done={false}
-          title="Configure league rules"
+          title="League settings"
           description={`Override cap, fees, schedule, scoring — anything from the ${sport.leagueLabel} preset.`}
           cta="League settings"
           href={`/league/${leagueId}/lm/league`}
@@ -136,7 +136,7 @@ export function CommissionerChecklist({
             title="Assign players to teams"
             description={
               doneAssign
-                ? `${status?.playersAssignedCount} player${status?.playersAssignedCount === 1 ? '' : 's'} assigned to teams. Bulk CSV available from the roster manager.`
+                ? `${status?.playersAssignedCount} player${status?.playersAssignedCount === 1 ? '' : 's'} assigned to teams.`
                 : 'Search players from the pool, pick their team, set their prior keeper round.'
             }
             cta="Manage rosters"
@@ -411,7 +411,7 @@ function PopulatePoolStep({
         disabled={running}
         className="flex-shrink-0 px-3 py-1.5 text-sm bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-semibold rounded-lg transition-colors whitespace-nowrap"
       >
-        {running ? 'Scraping…' : done ? 'Re-scrape' : 'Populate pool'}
+        {running ? 'Loading…' : done ? 'Refresh pool' : 'Populate pool'}
       </button>
     </div>
   )

@@ -56,22 +56,17 @@ const Transactions = lazy(() => import('./pages/Transactions').then((m) => ({ de
 const LeagueManagerHub = lazy(() => import('./pages/LeagueManagerHub').then((m) => ({ default: m.LeagueManagerHub })))
 const AdminLeague = lazy(() => import('./pages/AdminLeague').then((m) => ({ default: m.AdminLeague })))
 const AdminTeams = lazy(() => import('./pages/AdminTeams').then((m) => ({ default: m.AdminTeams })))
-const AdminRosterImport = lazy(() => import('./pages/AdminRosterImport').then((m) => ({ default: m.AdminRosterImport })))
 const AdminRosterManager = lazy(() => import('./pages/AdminRosterManager').then((m) => ({ default: m.AdminRosterManager })))
 const AdminDraftSetup = lazy(() => import('./pages/AdminDraftSetup').then((m) => ({ default: m.AdminDraftSetup })))
 const AdminDraftTest = lazy(() => import('./pages/AdminDraftTest').then((m) => ({ default: m.AdminDraftTest })))
 const AdminDraftPicks = lazy(() => import('./pages/AdminDraftPicks').then((m) => ({ default: m.AdminDraftPicks })))
 const AdminRookiePicks = lazy(() => import('./pages/AdminRookiePicks').then((m) => ({ default: m.AdminRookiePicks })))
-const AdminTradeManager = lazy(() => import('./pages/AdminTradeManager').then((m) => ({ default: m.AdminTradeManager })))
-const AdminPortfolio = lazy(() => import('./pages/AdminPortfolio').then((m) => ({ default: m.AdminPortfolio })))
 
 // Site admin
 const AdminHub = lazy(() => import('./pages/AdminHub').then((m) => ({ default: m.AdminHub })))
 const AdminPlayers = lazy(() => import('./pages/AdminPlayers').then((m) => ({ default: m.AdminPlayers })))
 const AdminUpload = lazy(() => import('./pages/AdminUpload').then((m) => ({ default: m.AdminUpload })))
 const AdminProspects = lazy(() => import('./pages/AdminProspects').then((m) => ({ default: m.AdminProspects })))
-const AdminWNBAScraper = lazy(() => import('./pages/AdminWNBAScraper').then((m) => ({ default: m.AdminWNBAScraper })))
-const AdminWNBAProspects = lazy(() => import('./pages/AdminWNBAProspects').then((m) => ({ default: m.AdminWNBAProspects })))
 const AdminMigration = lazy(() => import('./pages/AdminMigration').then((m) => ({ default: m.AdminMigration })))
 const AdminPicksView = lazy(() => import('./pages/AdminPicksView').then((m) => ({ default: m.AdminPicksView })))
 const AdminEmailTemplates = lazy(() => import('./pages/AdminEmailTemplates').then((m) => ({ default: m.AdminEmailTemplates })))
@@ -214,21 +209,16 @@ export function App() {
             <Route path="/league/:leagueId/lm/league" element={<ProtectedRoute><LeagueLayout><AdminLeague /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/teams" element={<ProtectedRoute><LeagueLayout><AdminTeams /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/rosters" element={<ProtectedRoute><LeagueLayout><AdminRosterManager /></LeagueLayout></ProtectedRoute>} />
-            <Route path="/league/:leagueId/lm/roster-import" element={<ProtectedRoute><LeagueLayout><AdminRosterImport /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-setup" element={<ProtectedRoute><LeagueLayout><AdminDraftSetup /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-test" element={<ProtectedRoute><LeagueLayout><AdminDraftTest /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/draft-picks" element={<ProtectedRoute><LeagueLayout><AdminDraftPicks /></LeagueLayout></ProtectedRoute>} />
             <Route path="/league/:leagueId/lm/rookie-picks" element={<ProtectedRoute><LeagueLayout><AdminRookiePicks /></LeagueLayout></ProtectedRoute>} />
-            <Route path="/league/:leagueId/lm/trade" element={<ProtectedRoute><LeagueLayout><AdminTradeManager /></LeagueLayout></ProtectedRoute>} />
-            <Route path="/league/:leagueId/lm/portfolio" element={<ProtectedRoute><LeagueLayout><AdminPortfolio /></LeagueLayout></ProtectedRoute>} />
 
             {/* Site admin */}
             <Route path="/site-admin" element={<ProtectedRoute><AppLayout><AdminHub /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/players" element={<ProtectedRoute><AppLayout><AdminPlayers /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/upload" element={<ProtectedRoute><AppLayout><AdminUpload /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/prospects" element={<ProtectedRoute><AppLayout><AdminProspects /></AppLayout></ProtectedRoute>} />
-            <Route path="/admin/wnba-scraper" element={<ProtectedRoute><AppLayout><AdminWNBAScraper /></AppLayout></ProtectedRoute>} />
-            <Route path="/admin/wnba-prospects" element={<ProtectedRoute><AppLayout><AdminWNBAProspects /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/migration" element={<ProtectedRoute><AppLayout><AdminMigration /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/picks" element={<ProtectedRoute><AppLayout><AdminPicksView /></AppLayout></ProtectedRoute>} />
             <Route path="/admin/email-templates" element={<ProtectedRoute><AppLayout><AdminEmailTemplates /></AppLayout></ProtectedRoute>} />

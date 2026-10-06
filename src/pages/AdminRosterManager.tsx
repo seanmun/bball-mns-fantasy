@@ -157,7 +157,7 @@ export function AdminRosterManager() {
     <div className="max-w-6xl mx-auto px-4 py-6 pb-24">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Build rosters</h1>
+          <h1 className="text-2xl font-bold">Rosters</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {currentLeague.name} · {all.length} players · {unassigned} still free
           </p>
@@ -166,7 +166,7 @@ export function AdminRosterManager() {
           to={`/league/${currentLeague.id}/lm`}
           className="text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] shrink-0"
         >
-          ← LM tools
+          ← Commissioner
         </Link>
       </div>
 

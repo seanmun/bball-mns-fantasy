@@ -6,6 +6,7 @@ import { mnsLeagues, mnsTeams, mnsTeamOwners } from '../../src/lib/db/schema.js'
 import { createLeagueSchema, parseBody } from '../_validation.js'
 import { logger } from '../_logger.js'
 import { sport } from '../../src/lib/sport/index.js'
+import { ensureLeaguePool } from '../../src/lib/players/pool.js'
 import type { League } from '../../src/types/league.js'
 import type { Sport } from '../../src/types/leagueConfig.js'
 import type { LeaguePhase, ScoringMode } from '../../src/types/league.js'
@@ -109,6 +110,8 @@ async function handlePost(req: VercelRequest, res: VercelResponse, userId: strin
         commissionerId: userId,
       })
       .returning()
+    // The league's pool is the sport's pool, from the first second.
+    await ensureLeaguePool(db, row.id)
     return res.status(201).json(mapLeagueRow(row))
   } catch (err) {
     logger.error('POST /api/leagues failed', {

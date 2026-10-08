@@ -4,6 +4,7 @@ import { db } from '../_db.js'
 import { mnsLeagues } from '../../src/lib/db/schema.js'
 import { logger } from '../_logger.js'
 import { runSportPass } from '../../src/lib/season/sportSync.js'
+import { ensureAllLeaguePools } from '../../src/lib/players/pool.js'
 import { easternToday, matchupWeekFor, scoreLeagueWeek } from '../../src/lib/season/score.js'
 import { processWaivers } from '../../src/lib/season/waivers.js'
 import { applyLineupsForToday } from '../../src/lib/season/lineups.js'
@@ -40,6 +41,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     sportPass = { error: err instanceof Error ? err.message : String(err) }
     logger.error('season-tick: sport pass failed', { err: sportPass.error })
+  }
+
+  // Every league's pool follows the sport's: whoever the sport pass
+  // learned about just now is on every wire before anyone scores.
+  let pools: Awaited<ReturnType<typeof ensureAllLeaguePools>> | { error: string }
+  try {
+    pools = await ensureAllLeaguePools(db)
+  } catch (err) {
+    pools = { error: err instanceof Error ? err.message : String(err) }
+    logger.error('season-tick: league pools failed', { err: pools.error })
   }
 
   // Playoffs tick exactly like the regular season — ingest, score,
@@ -146,5 +157,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  return res.status(200).json({ ok: true, today, sportPass, leagues: report, finalsWritten })
+  return res.status(200).json({ ok: true, today, sportPass, pools, leagues: report, finalsWritten })
 }

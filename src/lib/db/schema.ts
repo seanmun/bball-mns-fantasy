@@ -145,6 +145,9 @@ export const mnsTeamOwners = gameSchema.table(
     // missing key means ON. Local by design (the NFL rule): these are
     // transactional, not hub marketing preferences.
     emailPrefs: jsonb('email_prefs').$type<Record<string, boolean>>().notNull().default(sql`'{}'::jsonb`),
+    // Null until the commissioner sends the invite — adding an owner
+    // never emails anyone by itself.
+    invitedAt: timestamp('invited_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (t) => [

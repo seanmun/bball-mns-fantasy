@@ -44,6 +44,7 @@ function mapOwnerRow(row: typeof mnsTeamOwners.$inferSelect): TeamOwner {
     displayName: row.displayName,
     isPrimary: row.isPrimary,
     emailPrefs: (row.emailPrefs ?? {}) as Record<string, boolean>,
+    invitedAt: row.invitedAt ? row.invitedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -72,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!(await canManageLeague(userId, leagueId))) {
       return res.status(403).json({ error: 'Only the commissioner can add teams' })
     }
+    if (req.body?.action === 'invite') return handleInvite(req, res, leagueId)
     return handlePost(req, res, leagueId)
   }
 
@@ -160,7 +162,7 @@ async function handlePatch(
         .where(and(eq(mnsTeamOwners.teamId, teamId), eq(mnsTeamOwners.userId, userId)))
     }
 
-    let invitesSent = 0
+    const invitesSent = 0
     if (req.body?.addOwnerEmail) {
       const email = String(req.body.addOwnerEmail).trim().toLowerCase()
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -182,44 +184,7 @@ async function handlePatch(
         isPrimary: false,
         createdAt: new Date(),
       })
-      // Same invite the commissioner's create sends — best-effort.
-      try {
-        const [league] = await db
-          .select({ name: mnsLeagues.name })
-          .from(mnsLeagues)
-          .where(eq(mnsLeagues.id, leagueId))
-          .limit(1)
-        const appUrl = process.env.VITE_APP_URL || sport.appUrl
-        const sent = await sendAll([
-          {
-            to: email,
-            subject: `You co-own ${team.name} — ${league?.name ?? sport.appName}`,
-            html: emailShell({
-              preheader: `You've been added as a co-owner of ${team.name}.`,
-              heading: `You co-own ${esc(team.name)}`,
-              subheading: esc(league?.name ?? `${sport.appName} dynasty`),
-              bodyHtml: emailNote(
-                `An owner added you to the team. Sign in — or create an account — with <b style="color:#f0f4f8">this email address</b> (${esc(email)}) and the team links to you automatically.`
-              ),
-              ctaLabel: 'Claim my team',
-              ctaUrl: `${appUrl}/sign-up`,
-              footerLine: `Sent because an owner of ${esc(team.name)} added this address on ${sport.appHost}.`,
-            }),
-            text: [
-              `You've been added as a co-owner of ${team.name} in ${league?.name ?? `an ${sport.appName} dynasty league`}.`,
-              '',
-              `Sign in or create an account with this email address (${email}) and the team links to you automatically.`,
-              `${appUrl}/sign-up`,
-            ].join('\n'),
-          },
-        ])
-        invitesSent = sent.sent
-      } catch (err) {
-        logger.error('co-owner invite email failed', {
-          teamId,
-          err: err instanceof Error ? err.message : String(err),
-        })
-      }
+      // No mail here: the commissioner sends invites when ready.
     }
 
     const [fresh] = await db.select().from(mnsTeams).where(eq(mnsTeams.id, teamId)).limit(1)
@@ -320,7 +285,8 @@ async function handlePost(
   const parsed = parseBody(createTeamSchema, req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error })
 
-  const { name, abbrev, ownerEmails, telegramUsername } = parsed.data
+  const { name, abbrev, telegramUsername } = parsed.data
+  const ownerEmails = parsed.data.ownerEmails ?? []
   const teamId = generateTeamId(name)
   const now = new Date()
 
@@ -360,53 +326,10 @@ async function handlePost(
 
     await db.insert(mnsTeamOwners).values(ownerInserts)
 
-    // The invite the UI has always promised. Best-effort — a mail
-    // hiccup must never fail team creation; failures are logged and
-    // reported in the response so the commissioner can chase them.
-    let invitesSent = 0
-    let invitesFailed = 0
-    try {
-      const [league] = await db
-        .select({ name: mnsLeagues.name })
-        .from(mnsLeagues)
-        .where(eq(mnsLeagues.id, leagueId))
-        .limit(1)
-      const appUrl = process.env.VITE_APP_URL || sport.appUrl
-      const sent = await sendAll(
-        ownerEmails.map((email) => ({
-          to: email,
-          subject: `You're in: ${name} — ${league?.name ?? sport.appName}`,
-          html: emailShell({
-            preheader: `You've been given ${name} in ${league?.name ?? `a ${sport.leagueLabel} dynasty league`}.`,
-            heading: `You own ${esc(name)}`,
-            subheading: esc(league?.name ?? `${sport.appName} dynasty`),
-            bodyHtml: emailNote(
-              `The commissioner handed you the keys. Sign in — or create an account — with <b style="color:#f0f4f8">this email address</b> (${esc(email)}) and the team links to you automatically.`
-            ),
-            ctaLabel: 'Claim my team',
-            ctaUrl: `${appUrl}/sign-up`,
-            footerLine: `Sent because the commissioner of ${esc(league?.name ?? 'an MNS league')} added this address on ${sport.appHost}.`,
-          }),
-          text: [
-            `You own ${name} in ${league?.name ?? `an ${sport.appName} dynasty league`}.`,
-            '',
-            `Sign in or create an account with this email address (${email}) and the team links to you automatically.`,
-            `${appUrl}/sign-up`,
-          ].join('\n'),
-        }))
-      )
-      invitesSent = sent.sent
-      invitesFailed = sent.failed.length
-      if (sent.failed.length) {
-        logger.error('owner invite emails failed', { teamId, failed: sent.failed })
-      }
-    } catch (err) {
-      invitesFailed = ownerEmails.length
-      logger.error('owner invite email error', {
-        teamId,
-        err: err instanceof Error ? err.message : String(err),
-      })
-    }
+    // Nothing is sent here. Owners wait with invitedAt null until the
+    // commissioner presses Send invites.
+    const invitesSent = 0
+    const invitesFailed = 0
 
     const ownerRows = await db
       .select()
@@ -425,5 +348,73 @@ async function handlePost(
       err: err instanceof Error ? err.message : String(err),
     })
     return res.status(500).json({ error: 'Failed to create team' })
+  }
+}
+
+// Send the "you own this team" email to every owner who has not had
+// one — the whole league, or one team — and stamp invitedAt. Re-runs
+// only reach owners added since. Best-effort per address; failures are
+// reported, not thrown.
+async function handleInvite(req: VercelRequest, res: VercelResponse, leagueId: string) {
+  const onlyTeamId = req.body?.teamId ? String(req.body.teamId) : null
+  try {
+    const [league] = await db
+      .select({ name: mnsLeagues.name })
+      .from(mnsLeagues)
+      .where(eq(mnsLeagues.id, leagueId))
+      .limit(1)
+    const rows = await db
+      .select({
+        email: mnsTeamOwners.email,
+        invitedAt: mnsTeamOwners.invitedAt,
+        teamId: mnsTeams.id,
+        teamName: mnsTeams.name,
+      })
+      .from(mnsTeamOwners)
+      .innerJoin(mnsTeams, eq(mnsTeams.id, mnsTeamOwners.teamId))
+      .where(eq(mnsTeams.leagueId, leagueId))
+    const pending = rows.filter(
+      (r) => !r.invitedAt && r.email && (!onlyTeamId || r.teamId === onlyTeamId)
+    )
+    if (pending.length === 0) return res.status(200).json({ sent: 0, failed: 0, pending: 0 })
+
+    const appUrl = process.env.VITE_APP_URL || sport.appUrl
+    const result = await sendAll(
+      pending.map((r) => ({
+        to: r.email,
+        subject: `You're in: ${r.teamName} — ${league?.name ?? sport.appName}`,
+        html: emailShell({
+          preheader: `You've been given ${r.teamName} in ${league?.name ?? `a ${sport.leagueLabel} dynasty league`}.`,
+          heading: `You own ${esc(r.teamName)}`,
+          subheading: esc(league?.name ?? `${sport.appName} dynasty`),
+          bodyHtml: emailNote(
+            `The commissioner handed you the keys. Sign in — or create an account — with <b style="color:#f0f4f8">this email address</b> (${esc(r.email)}) and the team links to you automatically.`
+          ),
+          ctaLabel: 'Claim my team',
+          ctaUrl: `${appUrl}/sign-up`,
+          footerLine: `Sent because the commissioner of ${esc(league?.name ?? 'an MNS league')} added this address on ${sport.appHost}.`,
+        }),
+        text: [
+          `You own ${r.teamName} in ${league?.name ?? `an ${sport.appName} dynasty league`}.`,
+          '',
+          `Sign in or create an account with this email address (${r.email}) and the team links to you automatically.`,
+          `${appUrl}/sign-up`,
+        ].join('\n'),
+      }))
+    )
+    const failedTo = new Set(result.failed.map((f) => f.to))
+    const now = new Date()
+    for (const r of pending) {
+      if (failedTo.has(r.email)) continue
+      await db
+        .update(mnsTeamOwners)
+        .set({ invitedAt: now })
+        .where(and(eq(mnsTeamOwners.teamId, r.teamId), eq(mnsTeamOwners.email, r.email)))
+    }
+    if (result.failed.length) logger.error('owner invite emails failed', { leagueId, failed: result.failed })
+    return res.status(200).json({ sent: result.sent, failed: result.failed.length, pending: pending.length })
+  } catch (err) {
+    logger.error('invite failed', { leagueId, err: err instanceof Error ? err.message : String(err) })
+    return res.status(500).json({ error: 'The invites could not be sent. Try again.' })
   }
 }

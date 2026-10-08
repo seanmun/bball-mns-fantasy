@@ -7,6 +7,7 @@ import {
   mnsTeams,
   mnsTeamOwners,
   users,
+  mnsPlayers,
 } from '../../../src/lib/db/schema.js'
 import { esc, sendAll } from '../../_email.js'
 import { emailNote, emailShell } from '../../_emailTemplate.js'
@@ -79,6 +80,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PATCH') return handlePatch(req, res, leagueId, userId)
 
+  if (req.method === 'DELETE') {
+    if (!(await canManageLeague(userId, leagueId))) {
+      return res.status(403).json({ error: 'Only the commissioner can remove a team' })
+    }
+    return handleDelete(req, res, leagueId)
+  }
+
   return res.status(405).json({ error: 'Method not allowed' })
 }
 
@@ -119,6 +127,13 @@ async function handlePatch(
         return res.status(400).json({ error: 'Team name must be 1-60 characters.' })
       }
       set.name = name
+    }
+    if (req.body?.abbrev !== undefined) {
+      const abbrev = String(req.body.abbrev).trim().toUpperCase()
+      if (abbrev.length < 1 || abbrev.length > 6) {
+        return res.status(400).json({ error: 'Abbreviation must be 1-6 characters.' })
+      }
+      set.abbrev = abbrev
     }
     if (req.body?.aiPrefs !== undefined) {
       const raw = req.body.aiPrefs as Record<string, unknown>
@@ -324,7 +339,7 @@ async function handlePost(
       createdAt: now,
     }))
 
-    await db.insert(mnsTeamOwners).values(ownerInserts)
+    if (ownerInserts.length > 0) await db.insert(mnsTeamOwners).values(ownerInserts)
 
     // Nothing is sent here. Owners wait with invitedAt null until the
     // commissioner presses Send invites.
@@ -416,5 +431,43 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, leagueId: s
   } catch (err) {
     logger.error('invite failed', { leagueId, err: err instanceof Error ? err.message : String(err) })
     return res.status(500).json({ error: 'The invites could not be sent. Try again.' })
+  }
+}
+
+// Remove a team before the season starts: its players go back to the
+// pool, its owners go with it. Once a schedule exists the team is in
+// matchups and history, and removal is refused in one sentence.
+// DELETE /api/leagues/:id/teams?teamId=
+async function handleDelete(req: VercelRequest, res: VercelResponse, leagueId: string) {
+  const teamId = String(req.query.teamId ?? req.body?.teamId ?? '')
+  if (!teamId) return res.status(400).json({ error: 'teamId is required.' })
+  try {
+    const [team] = await db.select().from(mnsTeams).where(eq(mnsTeams.id, teamId)).limit(1)
+    if (!team || team.leagueId !== leagueId) return res.status(404).json({ error: 'Team not found.' })
+    const [league] = await db
+      .select({ seasonStartedAt: mnsLeagues.seasonStartedAt })
+      .from(mnsLeagues)
+      .where(eq(mnsLeagues.id, leagueId))
+      .limit(1)
+    if (league?.seasonStartedAt) {
+      return res.status(400).json({
+        error: 'The season has started, so this team is in the schedule — rename it or hand it to a new owner instead.',
+      })
+    }
+    const released = await db
+      .update(mnsPlayers)
+      .set({ teamId: null, slot: 'active', onIR: false, isInternationalStash: false, redshirtedAt: null })
+      .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.teamId, teamId)))
+      .returning({ id: mnsPlayers.id })
+    await db.delete(mnsTeamOwners).where(eq(mnsTeamOwners.teamId, teamId))
+    await db.delete(mnsTeams).where(eq(mnsTeams.id, teamId))
+    return res.status(200).json({ ok: true, removed: team.name, playersReleased: released.length })
+  } catch (err) {
+    logger.error('DELETE /api/leagues/[id]/teams failed', {
+      leagueId,
+      teamId,
+      err: err instanceof Error ? err.message : String(err),
+    })
+    return res.status(500).json({ error: 'Could not remove that team. Try again.' })
   }
 }

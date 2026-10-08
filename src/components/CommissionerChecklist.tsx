@@ -98,7 +98,6 @@ export function CommissionerChecklist({
   const showDraft = setup.entryPhase !== 'regular_season'
 
   const doneTeams = (status?.teamsCount ?? 0) > 0
-  const donePool = (status?.playersPoolCount ?? 0) > 0
   const doneAssign = (status?.playersAssignedCount ?? 0) > 0
   const doneKeepers = !!status?.keepersLocked && (status?.rookiePicksCount ?? 0) > 0
   const doneDraft = !!status?.draftStatus && status.draftStatus !== 'setup'
@@ -141,7 +140,6 @@ export function CommissionerChecklist({
           cta="League settings"
           href={`/league/${leagueId}/lm/league`}
         />
-        <PopulatePoolStep leagueId={leagueId} n={num()} done={donePool} count={status?.playersPoolCount ?? 0} onRefresh={refresh} />
         {showAssign && (
           <StaticStep
             n={num()}
@@ -391,59 +389,3 @@ function StepNumber({ n, done }: { n: number; done: boolean }) {
   )
 }
 
-function PopulatePoolStep({
-  leagueId,
-  n,
-  done,
-  count,
-  onRefresh,
-}: {
-  leagueId: string
-  n: number
-  done: boolean
-  count: number
-  onRefresh: () => void
-}) {
-  const { apiFetch } = useApi()
-  const [running, setRunning] = useState(false)
-
-  const handleRun = async () => {
-    setRunning(true)
-    try {
-      const result = await apiFetch<{
-        totalScraped: number
-        inserted: number
-        updated: number
-      }>(`/api/leagues/${leagueId}/players/populate-pool`, { method: 'POST' })
-      toast.success(
-        `Player pool: ${result.totalScraped} scraped · ${result.inserted} new · ${result.updated} updated`
-      )
-      onRefresh()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Player pool population failed')
-    } finally {
-      setRunning(false)
-    }
-  }
-
-  return (
-    <div className="p-5 flex items-start gap-4">
-      <StepNumber n={n} done={done} />
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-white">Populate player pool</div>
-        <p className="text-sm text-gray-400 mt-1">
-          {done
-            ? `${count} ${sport.leagueLabel} players in this league's pool. Safe to re-run to refresh salaries.`
-            : `Loads the full ${sport.leagueLabel} player pool with current salaries.`}
-        </p>
-      </div>
-      <button
-        onClick={handleRun}
-        disabled={running}
-        className="flex-shrink-0 px-3 py-1.5 text-sm bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-semibold rounded-lg transition-colors whitespace-nowrap"
-      >
-        {running ? 'Loading…' : done ? 'Refresh pool' : 'Populate pool'}
-      </button>
-    </div>
-  )
-}

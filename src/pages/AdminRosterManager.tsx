@@ -260,7 +260,9 @@ export function AdminRosterManager() {
                 ))}
                 {pool.length === 0 ? (
                   <li className="text-sm text-[var(--color-muted-foreground)] px-3 py-4">
-                    No free agents match.
+                    {all.length === 0
+                      ? 'The player pool is on its way — it fills on its own within a few minutes of the league being created.'
+                      : 'No free agents match.'}
                   </li>
                 ) : null}
               </ul>

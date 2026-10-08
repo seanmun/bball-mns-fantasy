@@ -122,16 +122,7 @@ export function AdminTeams() {
                 key={team.id}
                 className="bg-mns-card border border-gray-800 rounded-lg p-5"
               >
-                <div className="flex items-baseline justify-between gap-3 mb-2">
-                  <div>
-                    <div className="text-lg font-bold text-white">
-                      {team.name}{' '}
-                      <span className="text-sm font-mono text-gray-500">
-                        ({team.abbrev})
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <TeamHeader leagueId={currentLeague.id} team={team} onChanged={fetchTeams} />
                 <div className="text-sm text-gray-400">
                   <span className="text-gray-500">Owners:</span>{' '}
                   {team.owners.length === 0
@@ -376,5 +367,125 @@ function AddOwner({ leagueId, teamId, onAdded }: { leagueId: string; teamId: str
         {busy ? 'Adding…' : 'Add'}
       </button>
     </form>
+  )
+}
+
+// The team's name and abbreviation, editable in place, and a way to
+// remove a team that should not exist — a duplicate, a typo — while
+// the season has not started. Everything a commissioner needs to fix
+// their own mistakes without asking anyone.
+function TeamHeader({
+  leagueId,
+  team,
+  onChanged,
+}: {
+  leagueId: string
+  team: TeamWithOwners
+  onChanged: () => void
+}) {
+  const { apiFetch } = useApi()
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(team.name)
+  const [abbrev, setAbbrev] = useState(team.abbrev)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      await apiFetch(`/api/leagues/${leagueId}/teams`, {
+        method: 'PATCH',
+        body: JSON.stringify({ teamId: team.id, name: name.trim(), abbrev: abbrev.trim().toUpperCase() }),
+      })
+      setEditing(false)
+      onChanged()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async () => {
+    setBusy(true)
+    try {
+      const r = await apiFetch<{ removed: string; playersReleased: number }>(
+        `/api/leagues/${leagueId}/teams?teamId=${encodeURIComponent(team.id)}`,
+        { method: 'DELETE' }
+      )
+      toast.success(
+        r.playersReleased ? `${r.removed} removed, ${r.playersReleased} players back in the pool.` : `${r.removed} removed.`
+      )
+      onChanged()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not remove the team')
+      setConfirmDelete(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          aria-label="Team name"
+          className="flex-1 min-w-[10rem] px-3 py-1.5 min-h-[2.5rem] bg-mns-dark border border-gray-700 rounded text-white focus:border-green-400 focus:outline-none"
+        />
+        <input
+          value={abbrev}
+          onChange={(e) => setAbbrev(e.target.value.toUpperCase())}
+          maxLength={6}
+          aria-label="Abbreviation"
+          className="w-24 px-3 py-1.5 min-h-[2.5rem] bg-mns-dark border border-gray-700 rounded text-white uppercase font-mono focus:border-green-400 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !name.trim() || !abbrev.trim()}
+          className="px-3 py-1.5 min-h-[2.5rem] text-sm font-semibold rounded bg-green-500 hover:bg-green-400 text-black disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(false)
+            setName(team.name)
+            setAbbrev(team.abbrev)
+          }}
+          className="text-sm text-gray-400 hover:text-white"
+        >
+          Cancel
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-baseline justify-between gap-3 mb-2">
+      <div className="text-lg font-bold text-white">
+        {team.name} <span className="text-sm font-mono text-gray-500">({team.abbrev})</span>
+      </div>
+      <div className="flex items-center gap-3 shrink-0 text-sm">
+        <button type="button" onClick={() => setEditing(true)} className="text-gray-400 hover:text-white">
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => (confirmDelete ? remove() : setConfirmDelete(true))}
+          disabled={busy}
+          className={confirmDelete ? 'font-semibold text-red-400 hover:text-red-300' : 'text-gray-400 hover:text-red-400'}
+        >
+          {busy ? 'Removing…' : confirmDelete ? 'Yes, remove this team' : 'Remove'}
+        </button>
+        {confirmDelete ? (
+          <button type="button" onClick={() => setConfirmDelete(false)} className="text-gray-400 hover:text-white">
+            Keep
+          </button>
+        ) : null}
+      </div>
+    </div>
   )
 }

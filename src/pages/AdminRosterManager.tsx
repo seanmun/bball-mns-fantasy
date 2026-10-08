@@ -182,8 +182,10 @@ export function AdminRosterManager() {
         </EmptyState>
       ) : (
         <>
-          {/* Every team's progress, and the switch between them. */}
-          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4">
+          {/* Every team's progress, and the switch between them. A phone
+              scrolls the strip sideways; a desktop wraps it so every
+              team is one click away without a trackpad. */}
+          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-4 lg:flex-wrap lg:overflow-visible">
             {teams.map((t) => {
               const filled = spotsOf(t.id)
               const on = t.id === activeTeam

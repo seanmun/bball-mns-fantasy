@@ -23,5 +23,7 @@ export interface TeamOwner {
   displayName: string | null
   isPrimary: boolean
   emailPrefs?: Record<string, boolean>
+  // Null until the commissioner sends the invite.
+  invitedAt?: string | null
   createdAt: string
 }

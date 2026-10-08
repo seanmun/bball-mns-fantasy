@@ -94,9 +94,11 @@ export const updatePlayerSchema = z
 export const createTeamSchema = z.object({
   name: z.string().trim().min(1).max(50),
   abbrev: z.string().trim().min(1).max(6).toUpperCase(),
+  // Optional: a team can exist before anyone owns it, and invites go
+  // out only when the commissioner says so.
   ownerEmails: z
     .array(z.string().trim().toLowerCase().email())
-    .min(1)
-    .max(5),
+    .max(5)
+    .default([]),
   telegramUsername: z.string().trim().max(50).optional().nullable(),
 })

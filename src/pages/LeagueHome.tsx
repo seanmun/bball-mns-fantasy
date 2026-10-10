@@ -128,13 +128,13 @@ export function LeagueHome() {
 
       {leaguePhase === 'keeper_season' ? (
         <Link
-          to={`/league/${league.id}/keepers`}
+          to={`/league/${league.id}/my-team`}
           className="mb-6 flex items-center justify-between bg-mns-card hover:bg-mns-hover border border-[var(--color-key,#ffb000)]/40 rounded-lg px-4 py-3"
         >
           <span>
             <b style={{ color: 'var(--color-key, #ffb000)' }}>Keeper season is open</b>
             <span className="block text-sm text-gray-400">
-              Declare who you carry into next year — everyone else hits the draft pool.
+              Set your keepers on My Team — plan, compare, submit. Everyone else hits the draft pool.
             </span>
           </span>
           <span className="text-xl" style={{ color: 'var(--color-key, #ffb000)' }}>→</span>

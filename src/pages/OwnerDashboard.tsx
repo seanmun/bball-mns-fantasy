@@ -10,6 +10,7 @@ import { PlayerName } from '../components/InjuryTag'
 import { RangeChips, type RangeKey, type StatAvg } from '../components/StatTable'
 import { PlayerCard, isFreshNews } from '../components/PlayerCard'
 import { StrategyDials } from '../components/StrategyDials'
+import { KeeperPlanner } from '../components/KeeperPlanner'
 import { COUNTS_AGAINST_CAP, HOLDS_ROSTER_SPOT } from '../lib/season/roster'
 import { assignSlots } from '../lib/season/positions'
 import { playerLocked, tipClock } from '../lib/season/locks'
@@ -446,6 +447,11 @@ export function OwnerDashboard() {
     )
   }
 
+  // Keeper season: the owner's team page IS the keeper planner. Other
+  // owners see the roster as usual — decisions are private until the lock.
+  if (mine && currentLeague?.leaguePhase === 'keeper_season') {
+    return <KeeperPlanner leagueId={leagueId} teamName={team.name} logo={team.logo} />
+  }
   return (
     <div className="mns-page py-2 pb-24">
       <div className="relative">

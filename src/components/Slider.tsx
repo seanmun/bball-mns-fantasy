@@ -28,9 +28,9 @@ export function Slider({ children, label = 'Scroll', className = '' }: { childre
   const page = (dir: -1 | 1) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.7, behavior: 'smooth' })
   const both = edge.left && edge.right
   return (
-    <div className={`relative ${className}`}>
+    <div className={className}>
       {!both ? (
-        <div className="hidden lg:flex absolute right-2 top-1.5 z-10 gap-1">
+        <div className="hidden lg:flex justify-end gap-1 px-2 pt-2">
           <button
             onClick={() => page(-1)}
             disabled={edge.left}

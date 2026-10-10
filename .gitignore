@@ -43,3 +43,7 @@ coverage/
 
 # Drizzle (keep generated migrations tracked; ignore studio temp)
 drizzle/.studio
+
+# preview harness output
+preview-dist/
+preview-shots/

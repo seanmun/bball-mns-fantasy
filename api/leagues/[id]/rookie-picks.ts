@@ -86,8 +86,9 @@ async function handleGet(res: VercelResponse, leagueId: string) {
 // POST { action: 'record', pickId, playerId } — commissioner: write down
 // a pick of a draft that already happened, any order, until the season
 // starts. POST { action: 'clear', pickId } empties one.
-// POST { action: 'assign', pickId, teamId } — commissioner: a traded pick
-// changes hands; a player recorded on it moves with it.
+// POST { action: 'assign', pickId, teamId?, originalTeamId? } — commissioner:
+// who holds a pick (a recorded player moves with it) and, as a tag, whose
+// it was before a trade.
 async function handlePost(
   req: VercelRequest,
   res: VercelResponse,
@@ -339,30 +340,53 @@ async function handlePost(
         return res.status(400).json({ error: 'The season has started — the rookie draft is history now.' })
       }
       const pickId = String(req.body?.pickId ?? '')
-      const teamId = String(req.body?.teamId ?? '')
       const [pick] = await db
         .select()
         .from(mnsRookieDraftPicks)
         .where(and(eq(mnsRookieDraftPicks.leagueId, leagueId), eq(mnsRookieDraftPicks.id, pickId)))
         .limit(1)
       if (!pick) return res.status(404).json({ error: 'Pick not found.' })
-      const [team] = await db
-        .select({ id: mnsTeams.id, name: mnsTeams.name })
-        .from(mnsTeams)
-        .where(and(eq(mnsTeams.leagueId, leagueId), eq(mnsTeams.id, teamId)))
-        .limit(1)
-      if (!team) return res.status(400).json({ error: 'That team is not in this league.' })
-      await db
-        .update(mnsRookieDraftPicks)
-        .set({ teamId: team.id, updatedAt: new Date() })
-        .where(eq(mnsRookieDraftPicks.id, pick.id))
-      if (pick.playerId) {
+      const leagueTeam = async (id: string) => {
+        const [t] = await db
+          .select({ id: mnsTeams.id, name: mnsTeams.name })
+          .from(mnsTeams)
+          .where(and(eq(mnsTeams.leagueId, leagueId), eq(mnsTeams.id, id)))
+          .limit(1)
+        return t ?? null
+      }
+      const updates: { teamId?: string; originalTeamId?: string | null; updatedAt: Date } = {
+        updatedAt: new Date(),
+      }
+      let holder: { id: string; name: string } | null = null
+      if (req.body?.teamId !== undefined) {
+        holder = await leagueTeam(String(req.body.teamId))
+        if (!holder) return res.status(400).json({ error: 'That team is not in this league.' })
+        updates.teamId = holder.id
+      }
+      // Where a traded pick came from — a tag, nothing more. null clears it.
+      if (req.body?.originalTeamId !== undefined) {
+        if (req.body.originalTeamId === null) updates.originalTeamId = null
+        else {
+          const from = await leagueTeam(String(req.body.originalTeamId))
+          if (!from) return res.status(400).json({ error: 'That team is not in this league.' })
+          updates.originalTeamId = from.id
+        }
+      }
+      if (updates.teamId === undefined && updates.originalTeamId === undefined) {
+        return res.status(400).json({ error: 'Nothing to change.' })
+      }
+      await db.update(mnsRookieDraftPicks).set(updates).where(eq(mnsRookieDraftPicks.id, pick.id))
+      if (holder && pick.playerId) {
         await db
           .update(mnsPlayers)
-          .set({ teamId: team.id, updatedAt: new Date() })
+          .set({ teamId: holder.id, updatedAt: new Date() })
           .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, pick.playerId)))
       }
-      return res.status(200).json({ ok: true, team: team.name, moved: pick.playerName })
+      return res.status(200).json({
+        ok: true,
+        team: holder?.name ?? null,
+        moved: holder ? pick.playerName : null,
+      })
     }
 
     // POST { action: 'clear', pickId } — commissioner: the pick empties
@@ -461,7 +485,9 @@ async function handlePut(
           pickInRound,
           overallPick: (round - 1) * order.length + pickInRound,
           teamId: order[i],
-          originalTeamId: order[i],
+          // An explicit per-round order is the pre-trade truth; a board
+          // built from team order knows nothing about trades yet.
+          originalTeamId: parsed.data.teamOrders ? order[i] : null,
           playerId: null,
           playerName: null,
           createdAt: now,

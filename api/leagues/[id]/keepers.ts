@@ -147,9 +147,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             inArray(mnsPlayers.slot, ['redshirt', 'international'])
           )
         )
+      // The one lock: the checklist reads the flag, the phase moves on.
       await db
         .update(mnsLeagues)
-        .set({ leaguePhase: 'draft', updatedAt: new Date() })
+        .set({ leaguePhase: 'draft', keepersLocked: true, updatedAt: new Date() })
         .where(eq(mnsLeagues.id, leagueId))
       return res.status(200).json({ ok: true, released: released.length })
     }

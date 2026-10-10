@@ -18,6 +18,7 @@ export const leaguePlayerColumns = {
   teamCode: mnsSportPlayers.teamCode,
   externalIds: mnsSportPlayers.externalIds,
   yearsPro: mnsSportPlayers.yearsPro,
+  careerGp: mnsSportPlayers.careerGp,
   age: mnsSportPlayers.age,
   jersey: mnsSportPlayers.jersey,
   leaguePresence: mnsSportPlayers.presence,

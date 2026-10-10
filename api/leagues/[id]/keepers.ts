@@ -50,6 +50,7 @@ const toPlanPlayer = (p: PlayerRow): PlanPlayer => ({
   slot: p.slot,
   isRookie: p.isRookie,
   yearsPro: p.yearsPro,
+  careerGp: p.careerGp,
   redshirtUsed: p.redshirtUsed,
   leaguePresence: p.leaguePresence,
   presenceOverride: p.presenceOverride,

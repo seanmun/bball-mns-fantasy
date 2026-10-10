@@ -49,10 +49,16 @@ describe('planOptions', () => {
     expect(planOptions(last, cfg).redshirtOk).toBe(false)
     expect(planOptions(last, cfg).redshirtWhy).toMatch(/one/)
   })
-  it('offers int stash to a player abroad or flagged by the commissioner', () => {
-    expect(planOptions(player({ id: 'a', leaguePresence: 'absent' }), cfg).intStashOk).toBe(true)
+  it('offers int stash only to a player not on a roster here with zero career games, or one the commissioner flagged', () => {
+    expect(planOptions(player({ id: 'a', leaguePresence: 'absent', careerGp: 0 }), cfg).intStashOk).toBe(true)
     expect(planOptions(player({ id: 'f', intEligible: true }), cfg).intStashOk).toBe(true)
-    expect(planOptions(player({ id: 'h' }), cfg).intStashOk).toBe(false)
+    const vet = planOptions(player({ id: 'v', leaguePresence: 'absent', careerGp: 212 }), cfg)
+    expect(vet.intStashOk).toBe(false)
+    expect(vet.intStashWhy).toMatch(/212 games/)
+    const unknown = planOptions(player({ id: 'u', leaguePresence: 'absent', careerGp: null }), cfg)
+    expect(unknown.intStashOk).toBe(false)
+    expect(unknown.intStashWhy).toMatch(/unknown/)
+    expect(planOptions(player({ id: 'h', careerGp: 0 }), cfg).intStashOk).toBe(false)
   })
 })
 

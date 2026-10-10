@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ESPN_ATHLETE_STATS, parseSeasonAverages } from '../lib/season/seasonAverages'
+import { ESPN_ATHLETE_STATS, careerGames, parseSeasonAverages } from '../lib/season/seasonAverages'
 import { sport } from '../lib/sport/index'
 
 // ESPN's real column orders: NBA and WNBA differ, so the parser reads by label.
@@ -55,5 +55,17 @@ describe('ESPN_ATHLETE_STATS', () => {
     expect(url).toBe(`https://site.web.api.espn.com/apis/common/v3/sports/${sport.espn.league}/athletes/3945274/stats`)
     expect(url).not.toMatch(/basketball\/basketball/)
     expect(url).toMatch(/\/sports\/basketball\/(nba|wnba)\/athletes\//)
+  })
+})
+
+describe('careerGames', () => {
+  it('sums GP over every season row and is 0 with no seasons', () => {
+    const p = payload(NBA_LABELS, [
+      ['2024-25', ['70', ...NBA_LABELS.slice(1).map(() => '0')]],
+      ['2025-26', ['64', ...NBA_LABELS.slice(1).map(() => '0')]],
+    ])
+    expect(careerGames(p)).toBe(134)
+    expect(careerGames(payload(NBA_LABELS, []))).toBe(0)
+    expect(careerGames({})).toBe(0)
   })
 })

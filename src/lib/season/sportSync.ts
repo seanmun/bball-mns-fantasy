@@ -17,6 +17,7 @@ import {
 import { easternToday } from './score.js'
 import { syncSeasonAverages } from './seasonAverages.js'
 import { scrapeWnbaPlayers } from '../scrapers/wnba.js'
+import { matchBbrefPlayer, scrapeBbrefContracts } from '../scrapers/bbref.js'
 
 // The sport pass. ESPN is read ONCE per sport per tick and written to
 // the sport tables; leagues never touch ESPN. Rosters (and, where the
@@ -45,6 +46,8 @@ interface Known {
   id: string
   espnId: string | null
   name: string
+  salarySource?: string | null
+  salarySeasonYear?: number | null
 }
 
 const weekKey = (today: string) =>
@@ -52,7 +55,13 @@ const weekKey = (today: string) =>
 
 async function loadKnown(db: Db): Promise<{ byEspn: Map<string, Known>; byName: Map<string, Known> }> {
   const rows = (await db
-    .select({ id: mnsSportPlayers.id, espnId: mnsSportPlayers.espnId, name: mnsSportPlayers.name })
+    .select({
+      id: mnsSportPlayers.id,
+      espnId: mnsSportPlayers.espnId,
+      name: mnsSportPlayers.name,
+      salarySource: mnsSportPlayers.salarySource,
+      salarySeasonYear: mnsSportPlayers.salarySeasonYear,
+    })
     .from(mnsSportPlayers)) as Known[]
   const byEspn = new Map<string, Known>()
   const byName = new Map<string, Known>()
@@ -108,8 +117,20 @@ export async function syncRosters(db: Db, now = new Date()) {
         const espnId = a.id != null ? String(a.id) : null
         const name = a.displayName ?? a.fullName
         if (!espnId || !name) continue
+        // By ESPN id first; then a player a salary source met before
+        // ESPN did (same name, no ESPN id yet) adopts this id.
+        const row = known.byEspn.get(espnId) ?? known.byName.get(normName(name))
+        // ESPN's contract figure, as the source or the fallback — but a
+        // figure the primary source already set for this season stands.
+        const espnPays =
+          sport.salary.source === 'espn-contracts' || sport.salary.fallback === 'espn-contracts'
+        const primaryStands =
+          !!row &&
+          row.salarySource === sport.salary.source &&
+          sport.salary.source !== 'espn-contracts' &&
+          row.salarySeasonYear === sport.calendar.seasonYear
         const salary =
-          sport.salary.source === 'espn-contracts'
+          espnPays && !primaryStands
             ? salaryFor(a.contracts, sport.calendar.seasonYear, sport.salary.minimum)
             : null
         const fields = {
@@ -128,9 +149,6 @@ export async function syncRosters(db: Db, now = new Date()) {
             ? { salary: salary.salary, salarySource: salary.source, salarySeasonYear: sport.calendar.seasonYear }
             : {}),
         }
-        // By ESPN id first; then a player a salary source met before
-        // ESPN did (same name, no ESPN id yet) adopts this id.
-        const row = known.byEspn.get(espnId) ?? known.byName.get(normName(name))
         if (row && (row.espnId === espnId || row.espnId == null)) {
           await db.update(mnsSportPlayers).set(fields).where(eq(mnsSportPlayers.id, row.id))
           row.espnId = espnId
@@ -161,6 +179,46 @@ export async function syncRosters(db: Db, now = new Date()) {
     absent = gone.length
   }
   return { clubs: clubs.length, failed, created, refreshed, absent }
+}
+
+// NBA salaries from Basketball-Reference's contracts page, by name and
+// club. Nobody is created: a player under contract and on no ESPN
+// roster is a trade-deadline oddity, not a pool member.
+export async function syncSalariesBbref(db: Db, seasonYear: number, now = new Date()) {
+  const label = sport.espnSeasonLabel(seasonYear)
+  const scrape = await scrapeBbrefContracts(label)
+  const pool = (await db
+    .select({ id: mnsSportPlayers.id, name: mnsSportPlayers.name, teamCode: mnsSportPlayers.teamCode })
+    .from(mnsSportPlayers)) as Array<{ id: string; name: string; teamCode: string }>
+  let matched = 0
+  const unmatched: string[] = []
+  for (const p of scrape.players) {
+    const id = matchBbrefPlayer(p, pool)
+    if (!id) {
+      unmatched.push(`${p.name} (${p.team})`)
+      continue
+    }
+    await db
+      .update(mnsSportPlayers)
+      .set({
+        salary: p.salary,
+        salarySource: 'bbref',
+        salarySeasonYear: seasonYear,
+        contract: { seasons: p.seasons, guaranteed: p.guaranteed, source: 'bbref', fetchedAt: now.toISOString() },
+        updatedAt: now,
+      })
+      .where(eq(mnsSportPlayers.id, id))
+    matched++
+  }
+  return {
+    label,
+    column: scrape.column,
+    scraped: scrape.players.length,
+    matched,
+    unmatched: unmatched.length,
+    unmatchedSample: unmatched.slice(0, 12),
+    sourceStatus: scrape.sourceStatus,
+  }
 }
 
 // WNBA salaries from Her Hoop Stats. Matches by slug, then by name; a
@@ -416,7 +474,11 @@ export async function syncCalendar(db: Db, now = new Date()) {
 export interface SportPassReport {
   calendar?: Awaited<ReturnType<typeof syncCalendar>> | { error: string }
   rosters?: Awaited<ReturnType<typeof syncRosters>> | { skipped: true } | { error: string }
-  salaries?: Awaited<ReturnType<typeof syncSalariesScraped>> | { skipped: true } | { error: string }
+  salaries?:
+    | Awaited<ReturnType<typeof syncSalariesScraped>>
+    | Awaited<ReturnType<typeof syncSalariesBbref>>
+    | { skipped: true }
+    | { error: string }
   injuries?: Awaited<ReturnType<typeof syncInjuries>> | { error: string }
   lines?: Record<string, Awaited<ReturnType<typeof syncStatLines>> | { error: string }>
   seasonAverages?: Awaited<ReturnType<typeof syncSeasonAverages>> | { error: string }
@@ -441,11 +503,14 @@ export async function runSportPass(db: Db, now = new Date()): Promise<SportPassR
     report.rosters = { skipped: true }
   }
 
-  if (sport.salary.source === 'herhoopstats') {
+  if (sport.salary.source === 'herhoopstats' || sport.salary.source === 'bbref') {
     const key = weekKey(today)
     if (await claim(db, 'salaries', key)) {
       try {
-        report.salaries = await syncSalariesScraped(db, sport.calendar.seasonYear, now)
+        report.salaries =
+          sport.salary.source === 'bbref'
+            ? await syncSalariesBbref(db, sport.calendar.seasonYear, now)
+            : await syncSalariesScraped(db, sport.calendar.seasonYear, now)
         await note(db, 'salaries', key, report.salaries)
       } catch (err) {
         await release(db, 'salaries', key)

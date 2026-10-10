@@ -205,6 +205,14 @@ export const mnsSportPlayers = gameSchema.table(
     // Real money, sport-level: the contract for this season, the
     // scraped figure, or the league minimum when the source has none.
     salary: bigint('salary', { mode: 'number' }).notNull().default(0),
+    // The whole contract where a source lists it: dollars per season
+    // label, the guaranteed total, and where it came from.
+    contract: jsonb('contract').$type<{
+      seasons: Record<string, number>
+      guaranteed: number | null
+      source: string
+      fetchedAt: string
+    }>(),
     salarySource: text('salary_source').notNull().default('unknown'),
     salarySeasonYear: integer('salary_season_year'),
     externalIds: jsonb('external_ids').$type<ExternalIds>().notNull().default(sql`'{}'::jsonb`),

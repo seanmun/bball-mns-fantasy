@@ -8,7 +8,7 @@
 import { config } from 'dotenv'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
-import { syncCalendarMonth, syncInjuries, syncRosters, syncSalariesScraped, syncStatLines } from '../src/lib/season/sportSync.js'
+import { syncCalendarMonth, syncInjuries, syncRosters, syncSalariesBbref, syncSalariesScraped, syncStatLines } from '../src/lib/season/sportSync.js'
 import { syncSeasonAverages } from '../src/lib/season/seasonAverages.js'
 import { easternToday } from '../src/lib/season/score.js'
 import { sport } from '../src/lib/sport/index.js'
@@ -48,6 +48,19 @@ if (process.argv.includes('--season-averages')) {
   console.log('sport_season_averages:', JSON.stringify(c))
   process.exit(0)
 }
+// --salaries: the sport's salary source now (the tick claims it weekly), then stop.
+if (process.argv.includes('--salaries')) {
+  console.time('salaries')
+  if (sport.salary.source === 'bbref') console.log('salaries:', JSON.stringify(await syncSalariesBbref(db, sport.calendar.seasonYear, now)))
+  else if (sport.salary.source === 'herhoopstats') console.log('salaries:', JSON.stringify(await syncSalariesScraped(db, sport.calendar.seasonYear, now)))
+  else console.log('salaries come from ESPN contracts on the roster pass')
+  console.timeEnd('salaries')
+  const [sum] = (await client.query(
+    `select salary_source, count(*)::int as n, count(*) filter (where presence='rostered')::int as rostered, round(avg(salary))::bigint as avg from ${sport.schema}.sport_players group by 1 order by 2 desc`
+  ).then((r) => [r])) as Record<string, unknown>[][]
+  console.log('by source:', JSON.stringify(sum))
+  process.exit(0)
+}
 if (dates.length === 0) dates.push(easternToday(new Date(now.getTime() - 86400000)), easternToday(now))
 
 console.log(`sport=${sport.key} schema=${sport.schema}`)
@@ -58,6 +71,10 @@ if (sport.salary.source === 'herhoopstats') {
   console.time('salaries')
   const s = await syncSalariesScraped(db, sport.calendar.seasonYear, now)
   console.log('salaries:', JSON.stringify({ scraped: s.scraped, matched: s.matched, created: s.created, hhs: s.sourceStatus.herhoopstats }))
+  console.timeEnd('salaries')
+} else if (sport.salary.source === 'bbref') {
+  console.time('salaries')
+  console.log('salaries:', JSON.stringify(await syncSalariesBbref(db, sport.calendar.seasonYear, now)))
   console.timeEnd('salaries')
 }
 console.log('injuries:', JSON.stringify(await syncInjuries(db, now)))

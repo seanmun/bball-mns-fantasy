@@ -5,6 +5,9 @@
 set -e
 cd "$(dirname "$0")/.."
 SCREEN=${1:-keepers}
+# A second argument is an aria-label to tap after render (what a tap opens).
+TAP=${2:-}
+Q=""; [[ -n "$TAP" ]] && Q="&tap=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$TAP")"
 OUT=preview-shots; mkdir -p $OUT
 VITE_SPORT=${VITE_SPORT:-nba} npx vite build --config vite.preview.config.ts >/dev/null
 PORT=8137
@@ -13,9 +16,9 @@ sleep 1
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 for theme in light dark; do
   "$CHROME" --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=4000 --window-size=500,2200 \
-    --screenshot="$OUT/$SCREEN-$theme-phone.png" "http://localhost:$PORT/?screen=$SCREEN&theme=$theme&width=400" >/dev/null 2>&1
+    --screenshot="$OUT/$SCREEN-$theme-phone.png" "http://localhost:$PORT/?screen=$SCREEN&theme=$theme&width=400$Q" >/dev/null 2>&1
   "$CHROME" --headless=new --disable-gpu --hide-scrollbars --virtual-time-budget=4000 --window-size=1280,1400 \
-    --screenshot="$OUT/$SCREEN-$theme-desktop.png" "http://localhost:$PORT/?screen=$SCREEN&theme=$theme" >/dev/null 2>&1
+    --screenshot="$OUT/$SCREEN-$theme-desktop.png" "http://localhost:$PORT/?screen=$SCREEN&theme=$theme$Q" >/dev/null 2>&1
 done
 kill $PID 2>/dev/null || true
 ls -la $OUT | grep "$SCREEN"

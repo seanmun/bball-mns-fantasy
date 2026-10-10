@@ -5,6 +5,7 @@ import { useApi } from '../hooks/useApi'
 import { useLeague } from '../contexts/LeagueContext'
 import { Banner, Button, Card, ConfirmPanel, PageHeader } from '../ui/components'
 import { PlayerName } from './InjuryTag'
+import { PlayerCard } from './PlayerCard'
 import { Slider } from './Slider'
 import { Globe, Shirt, Star } from 'lucide-react'
 import { RangeChips, type RangeKey, type StatAvg } from './StatTable'
@@ -77,6 +78,8 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving'>('saved')
+  // The same player card My Team opens: tap a name.
+  const [cardId, setCardId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     apiFetch<Payload>(`/api/leagues/${leagueId}/keepers`)
@@ -295,6 +298,7 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
         }
         status={`Keep up to ${data.maxKeepers}. Decide each player, save ideas to compare, then submit one.`}
       />
+      <PlayerCard leagueId={leagueId} playerId={cardId} ranges={ranges} onClose={() => setCardId(null)} />
       {submitted ? (
         <div className="mb-4"><Banner tone="ok">Submitted. Your keepers are in. The commissioner can unlock if something needs fixing.</Banner></div>
       ) : !inPhase ? (
@@ -368,10 +372,14 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                         <td className={`sticky left-0 z-[1] bg-mns-card px-2 py-1.5 border-l-4 ${rowTone(d)}`}>
                           <div className="flex items-center gap-2 w-[12.5rem] lg:w-[15rem]">
                             {editable ? decisionIcons(p, d) : <span className="w-[4.5rem] shrink-0">{decisionTag(d)}</span>}
-                            <div className="min-w-0">
+                            <button
+                              onClick={() => setCardId(p.id)}
+                              aria-label={`Open card for ${p.name}`}
+                              className="min-w-0 text-left min-h-[2.5rem]"
+                            >
                               <b className="block truncate"><PlayerName name={p.name} injuryStatus={p.injuryStatus} /></b>
-                              <div className="text-xs text-[var(--color-muted-foreground)] truncate">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</div>
-                            </div>
+                              <span className="block text-xs text-[var(--color-muted-foreground)] truncate">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</span>
+                            </button>
                           </div>
                         </td>
                         <td className="relative isolate text-right px-2 py-1.5 overflow-hidden">

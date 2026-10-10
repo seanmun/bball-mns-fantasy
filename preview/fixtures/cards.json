@@ -1,0 +1,567 @@
+{
+ "the-money-never-sleeps-2027-f9vz7d:4432166": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4432166",
+   "name": "Cade Cunningham",
+   "yearsPro": 6,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "G",
+   "teamCode": "DET",
+   "salary": 50105628,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-05",
+    "min": 16,
+    "pts": 10,
+    "reb": 2,
+    "ast": 1,
+    "stl": 1,
+    "blk": 0,
+    "tpm": 2,
+    "fgm": 3,
+    "fga": 8,
+    "tov": 1
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:3945274": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:3945274",
+   "name": "Luka Doncic",
+   "yearsPro": 9,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "G",
+   "teamCode": "LAL",
+   "salary": 49500000,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 25,
+    "pts": 23,
+    "reb": 3,
+    "ast": 3,
+    "stl": 1,
+    "blk": 0,
+    "tpm": 2,
+    "fgm": 6,
+    "fga": 16,
+    "tov": 5
+   },
+   {
+    "date": "2026-10-05",
+    "min": 16,
+    "pts": 21,
+    "reb": 2,
+    "ast": 3,
+    "stl": 2,
+    "blk": 0,
+    "tpm": 3,
+    "fgm": 5,
+    "fga": 12,
+    "tov": 5
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4431680": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4431680",
+   "name": "Onyeka Okongwu",
+   "yearsPro": 7,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "F",
+   "teamCode": "ATL",
+   "salary": 16120000,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 22,
+    "pts": 13,
+    "reb": 4,
+    "ast": 5,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 2,
+    "fgm": 5,
+    "fga": 11,
+    "tov": 1
+   },
+   {
+    "date": "2026-10-05",
+    "min": 14,
+    "pts": 8,
+    "reb": 4,
+    "ast": 2,
+    "stl": 0,
+    "blk": 1,
+    "tpm": 1,
+    "fgm": 3,
+    "fga": 4,
+    "tov": 1
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:3062679": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:3062679",
+   "name": "Josh Hart",
+   "yearsPro": 10,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "G",
+   "teamCode": "NY",
+   "salary": 20923760,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 21,
+    "pts": 13,
+    "reb": 6,
+    "ast": 3,
+    "stl": 1,
+    "blk": 1,
+    "tpm": 1,
+    "fgm": 5,
+    "fga": 8,
+    "tov": 0
+   },
+   {
+    "date": "2026-10-05",
+    "min": 13,
+    "pts": 2,
+    "reb": 1,
+    "ast": 0,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 0,
+    "fgm": 1,
+    "fga": 1,
+    "tov": 1
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:5041955": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:5041955",
+   "name": "Darryn Peterson",
+   "yearsPro": 0,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "G",
+   "teamCode": "UTAH",
+   "salary": 1357763,
+   "isRookie": true,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-06",
+    "min": 30,
+    "pts": 23,
+    "reb": 3,
+    "ast": 3,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 1,
+    "fgm": 10,
+    "fga": 18,
+    "tov": 2
+   },
+   {
+    "date": "2026-10-04",
+    "min": 19,
+    "pts": 3,
+    "reb": 6,
+    "ast": 2,
+    "stl": 1,
+    "blk": 0,
+    "tpm": 0,
+    "fgm": 1,
+    "fga": 5,
+    "tov": 2
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4869780": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4869780",
+   "name": "Derik Queen",
+   "yearsPro": 2,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "C",
+   "teamCode": "NO",
+   "salary": 5416080,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 16,
+    "pts": 5,
+    "reb": 8,
+    "ast": 1,
+    "stl": 0,
+    "blk": 1,
+    "tpm": 0,
+    "fgm": 2,
+    "fga": 3,
+    "tov": 5
+   },
+   {
+    "date": "2026-10-06",
+    "min": 17,
+    "pts": 10,
+    "reb": 9,
+    "ast": 1,
+    "stl": 3,
+    "blk": 0,
+    "tpm": 1,
+    "fgm": 3,
+    "fga": 6,
+    "tov": 2
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4065731": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4065731",
+   "name": "Jay Huff",
+   "yearsPro": 5,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "C",
+   "teamCode": "IND",
+   "salary": 2667944,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-07",
+    "min": 17,
+    "pts": 16,
+    "reb": 4,
+    "ast": 4,
+    "stl": 1,
+    "blk": 1,
+    "tpm": 2,
+    "fgm": 6,
+    "fga": 11,
+    "tov": 2
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4396971": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4396971",
+   "name": "Naz Reid",
+   "yearsPro": 8,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "C",
+   "teamCode": "CHA",
+   "salary": 23275862,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-06",
+    "min": 16,
+    "pts": 13,
+    "reb": 4,
+    "ast": 0,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 1,
+    "fgm": 3,
+    "fga": 9,
+    "tov": 3
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4065733": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4065733",
+   "name": "Ty Jerome",
+   "yearsPro": 8,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "G",
+   "teamCode": "MEM",
+   "salary": 9220050,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-09",
+    "min": 14,
+    "pts": 16,
+    "reb": 1,
+    "ast": 4,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 4,
+    "fgm": 5,
+    "fga": 8,
+    "tov": 0
+   },
+   {
+    "date": "2026-10-07",
+    "min": 19,
+    "pts": 17,
+    "reb": 1,
+    "ast": 4,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 1,
+    "fgm": 7,
+    "fga": 14,
+    "tov": 0
+   },
+   {
+    "date": "2026-10-05",
+    "min": 15,
+    "pts": 12,
+    "reb": 0,
+    "ast": 5,
+    "stl": 0,
+    "blk": 1,
+    "tpm": 1,
+    "fgm": 4,
+    "fga": 8,
+    "tov": 3
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:3934719": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:3934719",
+   "name": "OG Anunoby",
+   "yearsPro": 10,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "F",
+   "teamCode": "NY",
+   "salary": 42500000,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 19,
+    "pts": 10,
+    "reb": 5,
+    "ast": 1,
+    "stl": 1,
+    "blk": 1,
+    "tpm": 0,
+    "fgm": 3,
+    "fga": 6,
+    "tov": 1
+   },
+   {
+    "date": "2026-10-05",
+    "min": 14,
+    "pts": 12,
+    "reb": 6,
+    "ast": 0,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 0,
+    "fgm": 3,
+    "fga": 7,
+    "tov": 0
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4997536": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4997536",
+   "name": "Gui Santos",
+   "yearsPro": 4,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "F",
+   "teamCode": "GS",
+   "salary": 4629630,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": "Day-To-Day",
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-06",
+    "min": 21,
+    "pts": 7,
+    "reb": 3,
+    "ast": 2,
+    "stl": 1,
+    "blk": 1,
+    "tpm": 0,
+    "fgm": 2,
+    "fga": 3,
+    "tov": 1
+   },
+   {
+    "date": "2026-10-04",
+    "min": 17,
+    "pts": 9,
+    "reb": 4,
+    "ast": 0,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 1,
+    "fgm": 3,
+    "fga": 7,
+    "tov": 2
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4592479": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4592479",
+   "name": "Julian Champagnie",
+   "yearsPro": 5,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "F",
+   "teamCode": "SA",
+   "salary": 3000000,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-08",
+    "min": 18,
+    "pts": 10,
+    "reb": 0,
+    "ast": 1,
+    "stl": 0,
+    "blk": 0,
+    "tpm": 2,
+    "fgm": 4,
+    "fga": 6,
+    "tov": 2
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4433249": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4433249",
+   "name": "Moussa Diabate",
+   "yearsPro": 5,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "F",
+   "teamCode": "CHA",
+   "salary": 2461462,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": null,
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": [
+   {
+    "date": "2026-10-06",
+    "min": 20,
+    "pts": 4,
+    "reb": 4,
+    "ast": 1,
+    "stl": 2,
+    "blk": 2,
+    "tpm": 0,
+    "fgm": 1,
+    "fga": 1,
+    "tov": 4
+   }
+  ]
+ },
+ "the-money-never-sleeps-2027-f9vz7d:4351852": {
+  "player": {
+   "id": "the-money-never-sleeps-2027-f9vz7d:4351852",
+   "name": "Mitchell Robinson",
+   "yearsPro": 9,
+   "leaguePresence": "rostered",
+   "presenceOverride": null,
+   "redshirtUsed": false,
+   "position": "C",
+   "teamCode": "BOS",
+   "salary": 1357763,
+   "isRookie": false,
+   "teamName": "Shamous Royals",
+   "injuryStatus": "Day-To-Day",
+   "injuryNote": null,
+   "injuryUpdatedAt": null
+  },
+  "log": []
+ }
+}

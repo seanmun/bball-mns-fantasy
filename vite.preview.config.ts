@@ -11,6 +11,7 @@ export default defineConfig({
     alias: [
       { find: /^(\.\.\/)+hooks\/useApi$/, replacement: path.resolve(__dirname, 'preview/mocks/useApi.ts') },
       { find: /^(\.\.\/)+contexts\/LeagueContext$/, replacement: path.resolve(__dirname, 'preview/mocks/LeagueContext.tsx') },
+      { find: '@clerk/clerk-react', replacement: path.resolve(__dirname, 'preview/mocks/clerk.ts') },
     ],
   },
   build: { outDir: path.resolve(__dirname, 'preview-dist'), emptyOutDir: true },

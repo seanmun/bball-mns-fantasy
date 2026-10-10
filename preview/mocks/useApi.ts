@@ -2,6 +2,7 @@
 import { useCallback } from 'react'
 import keepers from '../fixtures/keepers.json'
 import stats from '../fixtures/stats.json'
+import cards from '../fixtures/cards.json'
 export function useApi() {
   const apiFetch = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
     if (init?.method === 'POST') {
@@ -11,6 +12,8 @@ export function useApi() {
     }
     if (path.endsWith('/keepers')) return keepers as T
     if (path.endsWith('/stats')) return stats as T
+    const card = path.match(/\/players\/([^/?]+)$/)
+    if (card && (cards as Record<string, unknown>)[card[1]]) return (cards as Record<string, unknown>)[card[1]] as T
     throw new Error(`preview: no fixture for ${path}`)
   }, [])
   return { apiFetch }

@@ -56,13 +56,32 @@ export const setRookiePicksSchema = z
   .object({
     seasonYear: z.number().int().min(2020).max(2100),
     rounds: z.number().int().min(1).max(5),
-    // Draft order for round 1; the same order repeats each round
-    // (rookieOrderMethod 'manual' — no snaking).
+    // Draft order for round 1; without teamOrders the same order
+    // repeats each round (rookieOrderMethod 'manual' — no snaking).
     teamOrder: z.array(z.string().trim().min(1)).min(2).max(20),
+    // One order per round, when they differ (a lottery round 1, a
+    // standings round 2). Each is every team once.
+    teamOrders: z
+      .array(z.array(z.string().trim().min(1)).min(2).max(20))
+      .min(1)
+      .max(5)
+      .optional(),
   })
   .refine((d) => new Set(d.teamOrder).size === d.teamOrder.length, {
     message: 'teamOrder contains duplicate teams',
   })
+  .refine(
+    (d) =>
+      !d.teamOrders ||
+      (d.teamOrders.length === d.rounds &&
+        d.teamOrders.every(
+          (o) =>
+            o.length === d.teamOrder.length &&
+            new Set(o).size === o.length &&
+            o.every((id) => d.teamOrder.includes(id))
+        )),
+    { message: 'Each round must list every team exactly once' }
+  )
 
 export const bulkRosterRowSchema = z.object({
   playerName: z.string().trim().min(1),

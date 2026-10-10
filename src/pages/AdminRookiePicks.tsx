@@ -287,28 +287,67 @@ function RookiePickBoard({
     [picks, league.seasonYear]
   )
 
-  // Order being edited: seeded from round 1 of the existing board,
-  // falling back to team creation order.
-  const [order, setOrder] = useState<string[]>([])
+  // One order per round, being edited: seeded from the existing board
+  // (the slot's original owner, before trades), else team creation
+  // order. Round 1 is often a lottery and round 2 the standings, so
+  // they are separate lists; new rounds start as a copy of round 1.
+  const [orders, setOrders] = useState<string[][]>([])
   useEffect(() => {
-    const round1 = seasonPicks.filter((p) => p.round === 1)
-    setOrder(
-      round1.length > 0 ? round1.map((p) => p.teamId) : teams.map((t) => t.id)
+    const byRound = new Map<number, string[]>()
+    for (const p of seasonPicks) {
+      const list = byRound.get(p.round) ?? []
+      list[p.pickInRound - 1] = p.originalTeamId ?? p.teamId
+      byRound.set(p.round, list)
+    }
+    const base = byRound.get(1) ?? teams.map((t) => t.id)
+    setOrders(
+      Array.from({ length: Math.max(1, byRound.size) }, (_, i) => byRound.get(i + 1) ?? [...base])
     )
   }, [seasonPicks, teams])
+  // The round count changes: keep what's been ordered, add rounds as
+  // copies of round 1, drop extras.
+  useEffect(() => {
+    setOrders((prev) =>
+      Array.from({ length: rounds }, (_, i) => prev[i] ?? [...(prev[0] ?? teams.map((t) => t.id))])
+    )
+  }, [rounds, teams])
 
   const anySelected = seasonPicks.some((p) => p.playerId !== null)
   const showBuilder = editing || seasonPicks.length === 0
 
-  const move = useCallback((idx: number, delta: number) => {
-    setOrder((prev) => {
-      const next = [...prev]
+  const move = useCallback((round: number, idx: number, delta: number) => {
+    setOrders((prev) => {
+      const list = [...(prev[round] ?? [])]
       const target = idx + delta
-      if (target < 0 || target >= next.length) return prev
-      ;[next[idx], next[target]] = [next[target], next[idx]]
+      if (target < 0 || target >= list.length) return prev
+      ;[list[idx], list[target]] = [list[target], list[idx]]
+      const next = [...prev]
+      next[round] = list
       return next
     })
   }, [])
+
+  const assign = async (pick: RookieDraftPickRow, teamId: string) => {
+    if (teamId === pick.teamId) return
+    setSaving(true)
+    try {
+      const r = await apiFetch<{ team: string; moved: string | null }>(
+        `/api/leagues/${league.id}/rookie-picks`,
+        { method: 'POST', body: JSON.stringify({ action: 'assign', pickId: pick.id, teamId }) }
+      )
+      onPicksChange(picks.map((p) => (p.id === pick.id ? { ...p, teamId } : p)))
+      if (pick.playerId) {
+        onPlayersChange(players.map((pl) => (pl.id === pick.playerId ? { ...pl, teamId } : pl)))
+      }
+      toast.success(
+        `${pick.round}.${pick.pickInRound} now ${r.team}${r.moved ? ` · ${r.moved} moved too` : ''}`
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not move that pick')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const generate = async () => {
     setSaving(true)
@@ -320,7 +359,8 @@ function RookiePickBoard({
           body: JSON.stringify({
             seasonYear: league.seasonYear,
             rounds,
-            teamOrder: order,
+            teamOrder: orders[0] ?? [],
+            teamOrders: orders,
           }),
         }
       )
@@ -331,7 +371,7 @@ function RookiePickBoard({
       ])
       setEditing(false)
       toast.success(
-        `Rookie board set: ${rounds} round${rounds === 1 ? '' : 's'} × ${order.length} teams`
+        `Rookie board set: ${rounds} round${rounds === 1 ? '' : 's'} × ${orders[0]?.length ?? 0} teams`
       )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to set rookie picks')
@@ -382,52 +422,77 @@ function RookiePickBoard({
       </div>
       {!showBuilder && canRecord && (
         <p className="text-sm text-gray-400 mb-4">
-          Write each pick down: type a name, tap the player. Any order. A pick can be changed
-          or cleared until the season starts, and a player already on another team moves to
-          the team that picked him.
+          Write each pick down: type a name, tap the player. Any order. A traded pick: change
+          the team on it, and the slot shows who it came from. A pick can be changed or cleared
+          until the season starts, and a player already on another team moves to the team
+          that picked him.
         </p>
       )}
 
       {showBuilder ? (
         <div className="bg-mns-card border border-gray-800 rounded-lg p-5">
           <p className="text-sm text-gray-400 mb-4">
-            Set the round 1 order (worst finish picks first, or per your
-            league's agreement). The same order repeats each round.
+            Set each round's order as the slots were BEFORE any trades (a
+            lottery, worst finish first, or per your league's agreement).
+            Traded picks change hands on the board afterwards, pick by pick.
           </p>
-          <ol className="mb-5 divide-y divide-gray-800 border border-gray-800 rounded-lg overflow-hidden">
-            {order.map((teamId, idx) => {
-              const team = teamById.get(teamId)
-              return (
-                <li
-                  key={teamId}
-                  className="flex items-center gap-3 px-4 py-2.5 bg-mns-dark"
-                >
-                  <span className="w-8 text-gray-500 font-bold tabular-nums">
-                    {idx + 1}.
-                  </span>
-                  <span className="flex-1 font-semibold text-white">
-                    {team ? `${team.name} (${team.abbrev})` : teamId}
-                  </span>
+          {orders.map((order, round) => (
+            <div key={round} className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-400">
+                  Round {round + 1} order
+                </h3>
+                {round > 0 && (
                   <button
-                    onClick={() => move(idx, -1)}
-                    disabled={idx === 0}
-                    aria-label={`Move ${team?.name ?? teamId} up`}
-                    className="px-2 py-1 text-gray-400 hover:text-white disabled:opacity-30"
+                    onClick={() =>
+                      setOrders((prev) => {
+                        const next = [...prev]
+                        next[round] = [...prev[0]]
+                        return next
+                      })
+                    }
+                    className="text-xs text-green-400 hover:text-green-300"
                   >
-                    ↑
+                    Same as round 1
                   </button>
-                  <button
-                    onClick={() => move(idx, 1)}
-                    disabled={idx === order.length - 1}
-                    aria-label={`Move ${team?.name ?? teamId} down`}
-                    className="px-2 py-1 text-gray-400 hover:text-white disabled:opacity-30"
-                  >
-                    ↓
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
+                )}
+              </div>
+              <ol className="divide-y divide-gray-800 border border-gray-800 rounded-lg overflow-hidden">
+                {order.map((teamId, idx) => {
+                  const team = teamById.get(teamId)
+                  return (
+                    <li
+                      key={teamId}
+                      className="flex items-center gap-3 px-4 py-2.5 bg-mns-dark"
+                    >
+                      <span className="w-8 text-gray-500 font-bold tabular-nums">
+                        {idx + 1}.
+                      </span>
+                      <span className="flex-1 font-semibold text-white">
+                        {team ? `${team.name} (${team.abbrev})` : teamId}
+                      </span>
+                      <button
+                        onClick={() => move(round, idx, -1)}
+                        disabled={idx === 0}
+                        aria-label={`Move ${team?.name ?? teamId} up in round ${round + 1}`}
+                        className="px-2 py-1 min-h-[2.5rem] text-gray-400 hover:text-white disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => move(round, idx, 1)}
+                        disabled={idx === order.length - 1}
+                        aria-label={`Move ${team?.name ?? teamId} down in round ${round + 1}`}
+                        className="px-2 py-1 min-h-[2.5rem] text-gray-400 hover:text-white disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          ))}
           <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-sm text-gray-300">
               Rounds
@@ -494,9 +559,30 @@ function RookiePickBoard({
                           <span className="w-10 text-gray-500 tabular-nums">
                             {p.round}.{p.pickInRound}
                           </span>
-                          <span className="w-16 font-semibold text-white truncate">
-                            {team ? team.abbrev : p.teamId}
-                          </span>
+                          {canRecord ? (
+                            <select
+                              value={p.teamId}
+                              onChange={(e) => assign(p, e.target.value)}
+                              disabled={saving}
+                              aria-label={`Team holding pick ${p.round}.${p.pickInRound}`}
+                              className="w-24 min-h-[2.5rem] px-1 text-sm font-semibold bg-mns-dark border border-gray-700 rounded text-white"
+                            >
+                              {teams.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.abbrev}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="w-16 font-semibold text-white truncate">
+                              {team ? team.abbrev : p.teamId}
+                            </span>
+                          )}
+                          {p.originalTeamId && p.originalTeamId !== p.teamId && (
+                            <span className="text-xs text-gray-500">
+                              from {teamById.get(p.originalTeamId)?.abbrev ?? '?'}
+                            </span>
+                          )}
                           {searching ? (
                             <PickSearch
                               pick={p}

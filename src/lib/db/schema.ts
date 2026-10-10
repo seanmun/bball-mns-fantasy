@@ -560,6 +560,11 @@ export const mnsRookieDraftPicks = gameSchema.table(
     teamId: text('team_id')
       .notNull()
       .references(() => mnsTeams.id, { onDelete: 'cascade' }),
+    // Whose slot this was before any trade; null means never traded.
+    // team_id is who picks. Display only: "RASKOB (from BAD)".
+    originalTeamId: text('original_team_id').references(() => mnsTeams.id, {
+      onDelete: 'set null',
+    }),
     playerId: text('player_id'),
     playerName: text('player_name'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

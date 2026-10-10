@@ -29,6 +29,7 @@ function mapPickRow(
     pickInRound: row.pickInRound,
     overallPick: row.overallPick,
     teamId: row.teamId,
+    originalTeamId: row.originalTeamId ?? null,
     playerId: row.playerId,
     playerName: row.playerName,
     createdAt: row.createdAt.toISOString(),
@@ -85,6 +86,8 @@ async function handleGet(res: VercelResponse, leagueId: string) {
 // POST { action: 'record', pickId, playerId } — commissioner: write down
 // a pick of a draft that already happened, any order, until the season
 // starts. POST { action: 'clear', pickId } empties one.
+// POST { action: 'assign', pickId, teamId } — commissioner: a traded pick
+// changes hands; a player recorded on it moves with it.
 async function handlePost(
   req: VercelRequest,
   res: VercelResponse,
@@ -147,6 +150,7 @@ async function handlePost(
             pickInRound: i + 1,
             overallPick: (round - 1) * order.length + i + 1,
             teamId: ownerOf.get(`${round}:${original}`) ?? original,
+            originalTeamId: original,
             playerId: null,
             playerName: null,
             createdAt: now,
@@ -323,6 +327,44 @@ async function handlePost(
       })
     }
 
+    // POST { action: 'assign', pickId, teamId } — commissioner: a traded
+    // pick changes hands. The slot keeps its place and its original
+    // owner; whoever holds it picks, and a player already recorded on it
+    // moves with it.
+    if (action === 'assign') {
+      if (!(await canManageLeague(userId, leagueId))) {
+        return res.status(403).json({ error: 'Only the commissioner can move picks.' })
+      }
+      if (league.seasonStartedAt) {
+        return res.status(400).json({ error: 'The season has started — the rookie draft is history now.' })
+      }
+      const pickId = String(req.body?.pickId ?? '')
+      const teamId = String(req.body?.teamId ?? '')
+      const [pick] = await db
+        .select()
+        .from(mnsRookieDraftPicks)
+        .where(and(eq(mnsRookieDraftPicks.leagueId, leagueId), eq(mnsRookieDraftPicks.id, pickId)))
+        .limit(1)
+      if (!pick) return res.status(404).json({ error: 'Pick not found.' })
+      const [team] = await db
+        .select({ id: mnsTeams.id, name: mnsTeams.name })
+        .from(mnsTeams)
+        .where(and(eq(mnsTeams.leagueId, leagueId), eq(mnsTeams.id, teamId)))
+        .limit(1)
+      if (!team) return res.status(400).json({ error: 'That team is not in this league.' })
+      await db
+        .update(mnsRookieDraftPicks)
+        .set({ teamId: team.id, updatedAt: new Date() })
+        .where(eq(mnsRookieDraftPicks.id, pick.id))
+      if (pick.playerId) {
+        await db
+          .update(mnsPlayers)
+          .set({ teamId: team.id, updatedAt: new Date() })
+          .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, pick.playerId)))
+      }
+      return res.status(200).json({ ok: true, team: team.name, moved: pick.playerName })
+    }
+
     // POST { action: 'clear', pickId } — commissioner: the pick empties
     // and the player loses the slot; he stays on his team.
     if (action === 'clear') {
@@ -371,6 +413,7 @@ async function handlePut(
   if (!parsed.success) return res.status(400).json({ error: parsed.error })
 
   const { seasonYear, rounds, teamOrder } = parsed.data
+  const orders = parsed.data.teamOrders ?? Array.from({ length: rounds }, () => teamOrder)
 
   try {
     const leagueTeams = await db
@@ -407,7 +450,8 @@ async function handlePut(
     const suffix = Math.random().toString(36).slice(2, 8)
     const inserts = []
     for (let round = 1; round <= rounds; round++) {
-      for (let i = 0; i < teamOrder.length; i++) {
+      const order = orders[round - 1]
+      for (let i = 0; i < order.length; i++) {
         const pickInRound = i + 1
         inserts.push({
           id: `rk-${seasonYear}-${round}-${pickInRound}-${suffix}`,
@@ -415,8 +459,9 @@ async function handlePut(
           seasonYear,
           round,
           pickInRound,
-          overallPick: (round - 1) * teamOrder.length + pickInRound,
-          teamId: teamOrder[i],
+          overallPick: (round - 1) * order.length + pickInRound,
+          teamId: order[i],
+          originalTeamId: order[i],
           playerId: null,
           playerName: null,
           createdAt: now,

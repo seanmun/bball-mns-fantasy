@@ -207,12 +207,12 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
       value={d}
       onChange={(e) => change(setDecision(entries, p.id, e.target.value as Decision))}
       aria-label={`Decision for ${p.name}`}
-      className={`${compact ? 'min-h-[2.5rem]' : 'min-h-[3rem] min-w-[7rem]'} px-2 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]`}
+      className={`${compact ? 'min-h-[2.5rem] w-[4.5rem] shrink-0 px-1' : 'min-h-[3rem] min-w-[7rem] px-2'} rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]`}
     >
       <option value="DROP">Drop</option>
       <option value="KEEP" disabled={p.baseRound == null}>Keep{p.baseRound == null ? ' (no round)' : ''}</option>
       <option value="REDSHIRT" disabled={!p.redshirtOk} title={p.redshirtWhy}>Redshirt{!p.redshirtOk ? ' (n/a)' : ''}</option>
-      <option value="INT_STASH" disabled={!p.intStashOk} title={p.intStashWhy}>Int stash{!p.intStashOk ? ' (n/a)' : ''}</option>
+      <option value="INT_STASH" disabled={!p.intStashOk} title={p.intStashWhy}>Stash{!p.intStashOk ? ' (n/a)' : ''}</option>
     </select>
   )
   const decisionTag = (d: Decision) => (
@@ -226,17 +226,6 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
       <button onClick={() => change(movePriority(entries, p.id, 'down'))} aria-label={`${p.name} takes the later round`} className="px-1.5 min-h-[2rem] rounded border border-[var(--color-border-interactive)] text-[var(--color-accent)]">▼</button>
     </span>
   )
-  const priceText = (p: RosterRow, d: Decision) => {
-    const e = entryOf(p.id)
-    if (p.baseRound == null) return <span className="text-[var(--color-key,#ffb000)]">no round</span>
-    return (
-      <>
-        Rd {p.baseRound}
-        {d === 'KEEP' && e?.keeperRound && e.keeperRound !== p.baseRound ? <span className="text-[var(--color-accent)]"> → takes Rd {e.keeperRound}</span> : null}
-        {d === 'KEEP' && editable && conflictOf(p) ? priority(p) : null}
-      </>
-    )
-  }
   const rowTone = (d: Decision) => (d === 'KEEP' ? 'border-[var(--color-accent)]' : d === 'DROP' ? 'border-[var(--color-border)]' : 'border-[var(--color-key,#ffb000)]')
 
   return (
@@ -298,59 +287,14 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
             </div>
           ) : null}
 
-          {/* Phones: a card per player with the line underneath. */}
-          <ul className="lg:hidden flex flex-col gap-2 mb-3">
-            {sorted.map((p) => {
-              const d: Decision = entryOf(p.id)?.decision ?? 'DROP'
-              const st = stat(p.id)
-              return (
-                <li key={p.id} className={`rounded-xl border bg-mns-card px-3 py-2.5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 ${rowTone(d)}`}>
-                  <div className="font-bold text-lg leading-tight">
-                    <PlayerName name={p.name} injuryStatus={p.injuryStatus} />{' '}
-                    <span className="text-sm font-normal text-[var(--color-muted-foreground)] tabular-nums">{p.salary != null ? fmtM(p.salary) : ''}</span>
-                  </div>
-                  <div className="row-span-2 self-start">{editable ? decisionSelect(p, d) : decisionTag(d)}</div>
-                  <div className="text-sm text-[var(--color-muted-foreground)] tabular-nums">
-                    {[p.position, p.teamCode].filter(Boolean).join(' · ')} · <span className="text-[var(--color-foreground)]">{priceText(p, d)}</span>
-                  </div>
-                  {st ? (
-                    <div className="col-span-2 grid grid-cols-5 gap-x-1.5 gap-y-1 mt-1 tabular-nums">
-                      {(
-                        [
-                          [st.ppg, 'PTS'], [st.rpg, 'REB'], [st.apg, 'AST'], [st.spg, 'STL'], [st.bpg, 'BLK'],
-                          [st.tpg, '3PM'], [st.tov, 'TO'], [st.fgPct, 'FG%'], [st.ftPct, 'FT%'],
-                        ] as Array<[number | null | undefined, string]>
-                      ).map(([v, l]) => (
-                        <div key={l} className="flex flex-col items-center rounded-lg bg-[var(--color-muted)] py-1">
-                          <b>{f1(v)}</b>
-                          <span className="text-[0.7rem] tracking-wide text-[var(--color-muted-foreground)]">{l}</span>
-                        </div>
-                      ))}
-                      <div className="flex flex-col items-center rounded-lg bg-[var(--color-muted)] py-1">
-                        <b className={st.cat != null && st.cat > 0 ? 'text-[var(--color-accent)]' : ''}>{f2(st.cat)}</b>
-                        <span className="text-[0.7rem] tracking-wide text-[var(--color-muted-foreground)]">CAT · {st.gp} GP</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="col-span-2 text-sm text-[var(--color-muted-foreground)] mt-1">
-                      {p.rookieDraftInfo
-                        ? `Rookie — no ${rangeNote.toLowerCase()} line. Slot ${p.rookieDraftInfo.round}.${p.rookieDraftInfo.pick} prices him at Rd ${p.baseRound ?? '—'}.`
-                        : `No ${rangeNote.toLowerCase()} line.`}
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-
-          {/* Desktops: the sortable table, in a slider with its own arrows. */}
-          <div className="hidden lg:block mb-3">
+          {/* One row per player at every width: the player column pinned,
+              the stats slide sideways (swipe on phones, arrows on desktop). */}
+          <div className="mb-3">
             <Slider label="Scroll stats" className="rounded-xl border border-[var(--color-border)] bg-mns-card">
               <table className="w-full text-sm tabular-nums">
                 <thead>
-                  <tr className="text-[0.7rem] uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                    <th className="sticky left-0 bg-mns-card text-left px-3 py-2">Decision</th>
-                    <th className="text-left px-2 py-2">Player</th>
+                  <tr className="text-[0.68rem] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                    <th className="sticky left-0 z-[1] bg-mns-card text-left px-2 py-2">Player</th>
                     <th className="text-right px-2 py-2 cursor-pointer" onClick={() => setSortKey('salary')} aria-sort={sortKey === 'salary' ? 'descending' : undefined}>$</th>
                     <th className="text-right px-2 py-2 cursor-pointer" onClick={() => setSortKey('rd')} aria-sort={sortKey === 'rd' ? 'descending' : undefined}>Rd</th>
                     <th className="text-right px-2 py-2">Final</th>
@@ -368,10 +312,14 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                     const st = stat(p.id)
                     return (
                       <tr key={p.id} className="border-t border-[var(--color-border)]">
-                        <td className={`sticky left-0 bg-mns-card px-3 py-1.5 border-l-4 ${rowTone(d)}`}>{editable ? decisionSelect(p, d, true) : decisionTag(d)}</td>
-                        <td className="px-2 py-1.5 whitespace-nowrap">
-                          <b><PlayerName name={p.name} injuryStatus={p.injuryStatus} /></b>
-                          <div className="text-xs text-[var(--color-muted-foreground)]">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</div>
+                        <td className={`sticky left-0 z-[1] bg-mns-card px-2 py-1.5 border-l-4 ${rowTone(d)}`}>
+                          <div className="flex items-center gap-2 w-[11.5rem] lg:w-[14rem]">
+                            {editable ? decisionSelect(p, d, true) : <span className="w-[4.5rem] shrink-0">{decisionTag(d)}</span>}
+                            <div className="min-w-0">
+                              <b className="block truncate"><PlayerName name={p.name} injuryStatus={p.injuryStatus} /></b>
+                              <div className="text-xs text-[var(--color-muted-foreground)] truncate">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="text-right px-2 py-1.5">{p.salary != null ? fmtM(p.salary) : '—'}</td>
                         <td className="text-right px-2 py-1.5">{p.baseRound ?? <span className="text-[var(--color-key,#ffb000)]">none</span>}</td>
@@ -389,7 +337,7 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                             )
                           })
                         ) : (
-                          <td colSpan={COLUMNS.length} className="px-2 py-1.5 text-left text-[var(--color-muted-foreground)]">
+                          <td colSpan={COLUMNS.length} className="px-2 py-1.5 text-left text-[var(--color-muted-foreground)] whitespace-nowrap">
                             {p.rookieDraftInfo ? `Rookie — no ${rangeNote.toLowerCase()} line. Slot ${p.rookieDraftInfo.round}.${p.rookieDraftInfo.pick} prices him at Rd ${p.baseRound ?? '—'}.` : `No ${rangeNote.toLowerCase()} line.`}
                           </td>
                         )}
@@ -401,6 +349,7 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
             </Slider>
           </div>
           <p className="text-xs text-[var(--color-muted-foreground)] mb-3">
+            <span className="lg:hidden">Swipe the table sideways for the stats. </span>
             {rangeNote}. Cat = mean z-score across the nine categories against the league pool. Cat$ = Cat per $1M.
           </p>
 

@@ -1,0 +1,185 @@
+{
+ "id": "the-money-never-sleeps-2027-f9vz7d",
+ "name": "The Money Never Sleeps",
+ "seasonYear": 2027,
+ "leaguePhase": "keeper_season",
+ "commissionerId": "user_3Azd5NyE5gTV8V1makGQT16mdcI",
+ "keepersLocked": false,
+ "seasonStartedAt": null,
+ "config": {
+  "cap": {
+   "base": 208000000,
+   "floor": 0,
+   "enabled": true,
+   "hardCap": 272000000,
+   "firstApron": 208000000,
+   "tradeDelta": 0,
+   "secondApron": 240000000,
+   "penaltyRatePerM": 10,
+   "annualIncreasePct": 6.67
+  },
+  "fees": {
+   "buyIn": 50,
+   "redshirtFee": 10,
+   "activationFee": 25,
+   "firstApronFee": 50,
+   "franchiseTagFee": 15,
+   "penaltyRatePerM": 10
+  },
+  "draft": {
+   "type": "snake",
+   "rounds": 13,
+   "rookieRounds": 2,
+   "rookieOrderMethod": "manual",
+   "allowAdminOverride": true,
+   "rookieDraftEnabled": true,
+   "rookieYearsTracked": 3
+  },
+  "setup": {
+   "entryPhase": "keeper_season",
+   "rosterSource": "import"
+  },
+  "sport": "nba",
+  "keeper": {
+   "advanceRule": "minus_one",
+   "fallbackRound": null,
+   "rookieRoundMap": {
+    "2.x": 10,
+    "3.x": 10,
+    "1.1-1.3": 4,
+    "1.4-1.6": 5,
+    "1.7-1.9": 6,
+    "1.10-1.12": 7
+   },
+   "intStashAllowed": true,
+   "franchiseTagAllowed": true
+  },
+  "roster": {
+   "irSlots": 3,
+   "activeSize": 13,
+   "maxKeepers": 8,
+   "starterSize": 10,
+   "benchAllowed": true,
+   "positionSlots": [
+    {
+     "code": "PG",
+     "count": 1
+    },
+    {
+     "code": "SG",
+     "count": 1
+    },
+    {
+     "code": "SF",
+     "count": 1
+    },
+    {
+     "code": "PF",
+     "count": 1
+    },
+    {
+     "code": "C",
+     "count": 1
+    },
+    {
+     "code": "G",
+     "count": 1
+    },
+    {
+     "code": "F",
+     "count": 1
+    },
+    {
+     "code": "FLEX",
+     "count": 3
+    }
+   ],
+   "intStashAllowed": true,
+   "redshirtsAllowed": true
+  },
+  "season": {
+   "year": 2027,
+   "weeks": 16,
+   "startDate": "2026-10-20"
+  },
+  "scoring": {
+   "mode": "category_record",
+   "categories": [
+    "FG%",
+    "FT%",
+    "3PM",
+    "PTS",
+    "REB",
+    "AST",
+    "STL",
+    "BLK",
+    "A/TO"
+   ]
+  },
+  "schedule": {
+   "combineCup": false,
+   "playoffTeams": 6,
+   "playoffWeeks": 3,
+   "combinedWeeks": [
+    {
+     "label": "Combine weeks 7–8 (Dec 1 – Dec 14)",
+     "calendarWeeks": [
+      7,
+      8
+     ]
+    },
+    {
+     "label": "Combine weeks 18–19 (Feb 16 – Mar 1)",
+     "calendarWeeks": [
+      18,
+      19
+     ]
+    }
+   ],
+   "combineAllStar": true,
+   "extendFirstWeek": false,
+   "playoffByeTeams": 2,
+   "consolationWeeks": 0,
+   "tradeDeadlineDate": "",
+   "tradeDeadlineWeek": 16
+  },
+  "prizePool": {
+   "zones": {
+    "gekkoSplit": [
+     70,
+     20,
+     10
+    ],
+    "bernieSplit": [
+     40,
+     15,
+     9,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4
+    ],
+    "bernieThreshold": 10000,
+    "boilerThreshold": 300,
+    "boilerSmallSplit": [
+     80,
+     20
+    ]
+   },
+   "enabled": true,
+   "walletEnabled": false
+  },
+  "notifications": {
+   "drafts": true,
+   "trades": true,
+   "wagers": true,
+   "emailEnabled": true,
+   "telegramEnabled": true
+  }
+ }
+}

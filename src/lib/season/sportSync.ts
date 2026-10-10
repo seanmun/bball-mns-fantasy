@@ -15,6 +15,7 @@ import {
   type EspnSummary,
 } from './espn.js'
 import { easternToday } from './score.js'
+import { syncSeasonAverages } from './seasonAverages.js'
 import { scrapeWnbaPlayers } from '../scrapers/wnba.js'
 
 // The sport pass. ESPN is read ONCE per sport per tick and written to
@@ -418,6 +419,7 @@ export interface SportPassReport {
   salaries?: Awaited<ReturnType<typeof syncSalariesScraped>> | { skipped: true } | { error: string }
   injuries?: Awaited<ReturnType<typeof syncInjuries>> | { error: string }
   lines?: Record<string, Awaited<ReturnType<typeof syncStatLines>> | { error: string }>
+  seasonAverages?: Awaited<ReturnType<typeof syncSeasonAverages>> | { error: string }
 }
 
 // One sport pass per tick: the daily jobs claim their day, the live
@@ -473,6 +475,13 @@ export async function runSportPass(db: Db, now = new Date()): Promise<SportPassR
     } catch (err) {
       report.lines[day] = { error: err instanceof Error ? err.message : String(err) }
     }
+  }
+  // Last season's averages, a slice per tick until everyone has a row;
+  // a cheap no-op once they do.
+  try {
+    report.seasonAverages = await syncSeasonAverages(db, sport.calendar.seasonYear - 1, { limit: 60 })
+  } catch (err) {
+    report.seasonAverages = { error: err instanceof Error ? err.message : String(err) }
   }
   return report
 }

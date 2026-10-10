@@ -13,6 +13,10 @@ export interface StatAvg {
   bpg: number
   tpg: number
   fgPct: number
+  mpg?: number
+  tov?: number
+  ftPct?: number
+  tpPct?: number
   /** Cat Score: mean z-score across the nine categories. */
   cat?: number | null
   /** CAT$: Cat Score per $1M of salary. */

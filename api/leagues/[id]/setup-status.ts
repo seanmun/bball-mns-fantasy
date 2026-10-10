@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { eq, isNotNull, isNull, and, sql } from 'drizzle-orm'
+import { eq, isNotNull, isNull, inArray, and, sql } from 'drizzle-orm'
 import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
 import {
@@ -9,6 +9,7 @@ import {
   mnsPlayers,
   mnsDrafts,
   mnsRookieDraftPicks,
+  mnsRosters,
 } from '../../../src/lib/db/schema.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 
@@ -96,9 +97,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             )
           ),
         db
-          .select({ n: sql<number>`count(distinct ${mnsPlayers.teamId})::int` })
-          .from(mnsPlayers)
-          .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.isKeeper, true))),
+          .select({ n: count })
+          .from(mnsRosters)
+          .where(
+            and(
+              eq(mnsRosters.leagueId, leagueId),
+              eq(mnsRosters.seasonYear, league.seasonYear),
+              inArray(mnsRosters.status, ['submitted', 'adminLocked'])
+            )
+          ),
         db
           .select({ status: mnsDrafts.status })
           .from(mnsDrafts)

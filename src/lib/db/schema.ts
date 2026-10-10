@@ -197,6 +197,9 @@ export const mnsSportPlayers = gameSchema.table(
     age: integer('age'),
     dateOfBirth: text('date_of_birth'),
     yearsPro: integer('years_pro'),
+    // Games played in this league, career, from ESPN's per-season
+    // stats (summed at the season-averages pull). null = not pulled yet.
+    careerGp: integer('career_gp'),
     // rostered | rights_only | absent — judged by the sport adapter.
     presence: text('presence').notNull().default('absent'),
     // Real money, sport-level: the contract for this season, the

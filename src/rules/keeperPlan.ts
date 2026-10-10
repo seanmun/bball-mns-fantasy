@@ -3,7 +3,7 @@ import type { Player, RookieDraftInfo } from '../types/player'
 import type { Decision, RosterEntry, RosterSummary } from '../types/roster'
 import { baseKeeperRound, computeSummary, stackKeeperRounds } from './keeperRules.js'
 import { validateRoster, type ValidationError } from './validationRules.js'
-import { intStashEligible, redshirtEligible } from '../lib/season/roster.js'
+import { presenceOf, redshirtEligible } from '../lib/season/roster.js'
 
 // A keeper plan: one decision per rostered player — Keep, Drop,
 // Redshirt or Int Stash — priced, stacked into rounds and summed. The
@@ -19,6 +19,7 @@ export interface PlanPlayer {
   slot: string | null
   isRookie: boolean
   yearsPro?: number | null
+  careerGp?: number | null
   redshirtUsed?: boolean
   leaguePresence?: string | null
   presenceOverride?: string | null
@@ -52,16 +53,22 @@ export function planOptions(p: PlanPlayer, config: LeagueConfig): PlanOptions {
     redshirtOk = r.ok
     redshirtWhy = r.reason
   }
+  // Int stash: a player not on a club here who has never played here —
+  // zero career games — or one the commissioner has flagged.
   let intStashOk = false
   let intStashWhy: string | undefined
   if (!config.roster.intStashAllowed) {
     intStashWhy = 'This league has no international stash.'
   } else if (p.intEligible) {
     intStashOk = true
+  } else if (presenceOf(p) === 'rostered') {
+    intStashWhy = 'On a roster here — a stash is for players playing elsewhere.'
+  } else if (p.careerGp == null) {
+    intStashWhy = 'Career games unknown — the commissioner can flag him.'
+  } else if (p.careerGp > 0) {
+    intStashWhy = `Has played ${p.careerGp} games here — a stash is for players who never have.`
   } else {
-    const r = intStashEligible({ ...p, slot: null }, 0)
-    intStashOk = r.ok
-    intStashWhy = r.reason
+    intStashOk = true
   }
   return { baseRound, redshirtOk, redshirtWhy, intStashOk, intStashWhy }
 }

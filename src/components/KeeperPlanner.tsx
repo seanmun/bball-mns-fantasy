@@ -6,6 +6,7 @@ import { useLeague } from '../contexts/LeagueContext'
 import { Banner, Button, Card, ConfirmPanel, PageHeader } from '../ui/components'
 import { PlayerName } from './InjuryTag'
 import { Slider } from './Slider'
+import { Globe, Shirt, Star } from 'lucide-react'
 import { RangeChips, type RangeKey, type StatAvg } from './StatTable'
 import {
   blankEntries,
@@ -202,19 +203,64 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
   const sorted = [...data.myRoster].sort((a, b) => value(b) - value(a) || (b.salary ?? 0) - (a.salary ?? 0))
   const rangeNote = range === 'lastSeason' ? 'Last season' : range === 'season' ? 'This season so far' : range === 'last30' ? 'Last 30 days' : 'Last 10 days'
 
-  const decisionSelect = (p: RosterRow, d: Decision, compact = false) => (
-    <select
-      value={d}
-      onChange={(e) => change(setDecision(entries, p.id, e.target.value as Decision))}
-      aria-label={`Decision for ${p.name}`}
-      className={`${compact ? 'min-h-[2.5rem] w-[4.5rem] shrink-0 px-1' : 'min-h-[3rem] min-w-[7rem] px-2'} rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]`}
-    >
-      <option value="DROP">Drop</option>
-      <option value="KEEP" disabled={p.baseRound == null}>Keep{p.baseRound == null ? ' (no round)' : ''}</option>
-      <option value="REDSHIRT" disabled={!p.redshirtOk} title={p.redshirtWhy}>Redshirt{!p.redshirtOk ? ' (n/a)' : ''}</option>
-      <option value="INT_STASH" disabled={!p.intStashOk} title={p.intStashWhy}>Stash{!p.intStashOk ? ' (n/a)' : ''}</option>
-    </select>
-  )
+  // Tap an icon to decide; tap it again to drop. Keep stops at the
+  // league's limit — the ninth star says why instead of lighting up.
+  const toggle = (p: RosterRow, d: Decision) => {
+    const current = entryOf(p.id)?.decision ?? 'DROP'
+    if (current === d) return change(setDecision(entries, p.id, 'DROP'))
+    if (d === 'KEEP' && s.keepersCount >= data.maxKeepers) {
+      toast.error(`You're keeping ${data.maxKeepers} already — drop one to keep ${last(p.name)}.`)
+      return
+    }
+    change(setDecision(entries, p.id, d))
+  }
+  const iconClass = (on: boolean, tone: 'accent' | 'key') =>
+    `inline-flex items-center justify-center min-h-[2.5rem] min-w-[2.5rem] rounded-lg border ${
+      on
+        ? tone === 'accent'
+          ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+          : 'border-[var(--color-key,#ffb000)] text-[var(--color-key,#ffb000)] bg-[var(--color-key-soft,rgba(255,176,0,0.15))]'
+        : 'border-[var(--color-border)] text-[var(--color-muted-foreground)] bg-mns-card'
+    } disabled:opacity-35`
+  const decisionIcons = (p: RosterRow, d: Decision) => {
+    const atCap = d !== 'KEEP' && s.keepersCount >= data.maxKeepers
+    return (
+      <span className="inline-flex gap-1 shrink-0">
+        <button
+          onClick={() => toggle(p, 'KEEP')}
+          disabled={p.baseRound == null}
+          aria-pressed={d === 'KEEP'}
+          aria-label={`Keep ${p.name}`}
+          title={p.baseRound == null ? 'No round — cannot be kept' : atCap ? `Keeping ${data.maxKeepers} already` : d === 'KEEP' ? 'Kept — tap to drop' : 'Keep'}
+          className={iconClass(d === 'KEEP', 'accent')}
+        >
+          <Star aria-hidden className="w-5 h-5" fill={d === 'KEEP' ? 'currentColor' : 'none'} />
+        </button>
+        {p.redshirtOk || d === 'REDSHIRT' ? (
+          <button
+            onClick={() => toggle(p, 'REDSHIRT')}
+            aria-pressed={d === 'REDSHIRT'}
+            aria-label={`Redshirt ${p.name}`}
+            title={d === 'REDSHIRT' ? 'Redshirted — tap to drop' : 'Redshirt'}
+            className={iconClass(d === 'REDSHIRT', 'key')}
+          >
+            <Shirt aria-hidden className="w-5 h-5" fill={d === 'REDSHIRT' ? 'currentColor' : 'none'} />
+          </button>
+        ) : null}
+        {p.intStashOk || d === 'INT_STASH' ? (
+          <button
+            onClick={() => toggle(p, 'INT_STASH')}
+            aria-pressed={d === 'INT_STASH'}
+            aria-label={`Stash ${p.name}`}
+            title={d === 'INT_STASH' ? 'Stashed — tap to drop' : 'International stash'}
+            className={iconClass(d === 'INT_STASH', 'key')}
+          >
+            <Globe aria-hidden className="w-5 h-5" />
+          </button>
+        ) : null}
+      </span>
+    )
+  }
   const decisionTag = (d: Decision) => (
     <span className={`text-xs font-bold uppercase tracking-wide ${d === 'KEEP' ? 'text-[var(--color-accent)]' : d === 'DROP' ? 'text-[var(--color-muted-foreground)]' : 'text-[var(--color-key,#ffb000)]'}`}>
       {d === 'INT_STASH' ? 'Stash' : d.toLowerCase()}
@@ -313,8 +359,8 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                     return (
                       <tr key={p.id} className="border-t border-[var(--color-border)]">
                         <td className={`sticky left-0 z-[1] bg-mns-card px-2 py-1.5 border-l-4 ${rowTone(d)}`}>
-                          <div className="flex items-center gap-2 w-[11.5rem] lg:w-[14rem]">
-                            {editable ? decisionSelect(p, d, true) : <span className="w-[4.5rem] shrink-0">{decisionTag(d)}</span>}
+                          <div className="flex items-center gap-2 w-[12.5rem] lg:w-[15rem]">
+                            {editable ? decisionIcons(p, d) : <span className="w-[4.5rem] shrink-0">{decisionTag(d)}</span>}
                             <div className="min-w-0">
                               <b className="block truncate"><PlayerName name={p.name} injuryStatus={p.injuryStatus} /></b>
                               <div className="text-xs text-[var(--color-muted-foreground)] truncate">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</div>
@@ -349,7 +395,7 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
             </Slider>
           </div>
           <p className="text-xs text-[var(--color-muted-foreground)] mb-3">
-            <span className="lg:hidden">Swipe the table sideways for the stats. </span>
+            <span className="lg:hidden">Swipe the table sideways for the stats. </span>Tap ★ to keep, the jersey to redshirt; tap again to drop.{' '}
             {rangeNote}. Cat = mean z-score across the nine categories against the league pool. Cat$ = Cat per $1M.
           </p>
 

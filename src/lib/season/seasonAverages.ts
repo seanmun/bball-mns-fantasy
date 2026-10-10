@@ -59,6 +59,18 @@ const made = (v: string | undefined): [number, number] => {
   return [num(m), num(a)]
 }
 
+// Career games: every season row's GP, summed. A player ESPN lists
+// with no seasons has played none.
+export function careerGames(payload: EspnStatsPayload): number {
+  const cat = payload.categories?.find((c) => c.name === 'averages')
+  if (!cat?.labels || !cat.statistics) return 0
+  const gpAt = cat.labels.indexOf('GP')
+  if (gpAt < 0) return 0
+  return cat.statistics
+    .filter((s) => /\d/.test(s.season?.displayName ?? ''))
+    .reduce((n, s) => n + num(s.stats?.[gpAt]), 0)
+}
+
 // ESPN labels its columns; the order differs by sport, so read by name.
 export function parseSeasonAverages(
   payload: EspnStatsPayload,
@@ -105,11 +117,13 @@ export function parseSeasonAverages(
 export async function syncSeasonAverages(
   db: Db,
   seasonYear: number,
-  opts: { limit?: number; concurrency?: number } = {}
+  opts: { limit?: number; concurrency?: number; refresh?: boolean } = {}
 ): Promise<{ seasonYear: number; label: string; fetched: number; withLine: number; remaining: number }> {
   const label = sport.espnSeasonLabel(seasonYear)
   const limit = opts.limit ?? 60
   const concurrency = opts.concurrency ?? 4
+  // Players still without a row for this season — or, on refresh,
+  // everyone with an ESPN id.
   const pending = (await db
     .select({ id: mnsSportPlayers.id, espnId: mnsSportPlayers.espnId })
     .from(mnsSportPlayers)
@@ -120,7 +134,11 @@ export async function syncSeasonAverages(
         eq(mnsSportSeasonAverages.seasonYear, seasonYear)
       )
     )
-    .where(and(isNotNull(mnsSportPlayers.espnId), sql`${mnsSportSeasonAverages.playerId} is null`))
+    .where(
+      opts.refresh
+        ? isNotNull(mnsSportPlayers.espnId)
+        : and(isNotNull(mnsSportPlayers.espnId), sql`${mnsSportSeasonAverages.playerId} is null`)
+    )
     .orderBy(mnsSportPlayers.id)
     .limit(limit + 1)) as Array<{ id: string; espnId: string }>
   const batch = pending.slice(0, limit)
@@ -135,6 +153,14 @@ export async function syncSeasonAverages(
         const z: SeasonAverageRow = line ?? {
           label, gp: 0, gs: 0, min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0,
           fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, fgPct: 0, tpPct: 0, ftPct: 0,
+        }
+        // Career games ride along from the same payload; a failed fetch
+        // leaves what was known.
+        if (payload) {
+          await db
+            .update(mnsSportPlayers)
+            .set({ careerGp: careerGames(payload), updatedAt: now })
+            .where(eq(mnsSportPlayers.id, p.id))
         }
         return { playerId: p.id, seasonYear, ...z, fetchedAt: now }
       })

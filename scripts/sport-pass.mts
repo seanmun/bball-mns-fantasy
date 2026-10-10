@@ -38,7 +38,8 @@ if (process.argv.includes('--calendar')) {
 if (process.argv.includes('--season-averages')) {
   const seasonYear = sport.calendar.seasonYear - 1
   console.time('season averages')
-  const r = await syncSeasonAverages(db, seasonYear, { limit: 5000, concurrency: 6 })
+  // --refresh: everyone again (career games land on sport_players too).
+  const r = await syncSeasonAverages(db, seasonYear, { limit: 5000, concurrency: 6, refresh: process.argv.includes('--refresh') })
   console.timeEnd('season averages')
   console.log('season averages:', JSON.stringify(r))
   const [c] = (await client.query(

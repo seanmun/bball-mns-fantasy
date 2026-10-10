@@ -11,6 +11,13 @@ import { COUNTS_AGAINST_CAP, HOLDS_ROSTER_SPOT } from '../lib/season/roster'
 import type { StatAvg } from '../lib/playerView'
 import type { Player, PlayerSlot } from '../types/player'
 import type { Team } from '../types/team'
+import { baseKeeperRound } from '../rules/keeperRules'
+import {
+  formatRoundEntry,
+  parseRoundEntry,
+  slotForLastYearRedshirt,
+  slotFromThisBoard,
+} from '../rules/rookieSlots'
 
 // Building a league's rosters by hand — the migration tool. It used to
 // be one table of every player with a team dropdown on each row: to
@@ -42,6 +49,8 @@ export function AdminRosterManager() {
   const [error, setError] = useState<string | null>(null)
   const [activeTeam, setActiveTeam] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  // What's being typed in a "Rd" box, until it's committed on blur/Enter.
+  const [roundDrafts, setRoundDrafts] = useState<Record<string, string>>({})
   const searchRef = useRef<HTMLInputElement>(null)
 
   const leagueId = currentLeague?.id
@@ -93,6 +102,46 @@ export function AdminRosterManager() {
     [leagueId, apiFetch]
   )
 
+  // One box carries both prices: a bare round is last year's round
+  // (this year costs one less); round.pick is the rookie slot of a
+  // rookie redshirted last year (priced by the rookie table).
+  const commitRound = useCallback(
+    (p: Player, text: string) => {
+      setRoundDrafts((d) => {
+        const next = { ...d }
+        delete next[p.id]
+        return next
+      })
+      const entry = parseRoundEntry(text)
+      const previous = {
+        keeperPriorYearRound: p.keeperPriorYearRound,
+        rookieDraftInfo: p.rookieDraftInfo,
+      }
+      if (entry.kind === 'invalid') {
+        toast.error('Type a round (4) or a rookie slot (1.4)')
+        return
+      }
+      if (entry.kind === 'empty') {
+        if (p.keeperPriorYearRound == null && !p.rookieDraftInfo) return
+        void patch(p.id, { keeperPriorYearRound: null, rookieDraftInfo: null }, previous)
+        return
+      }
+      if (entry.kind === 'round') {
+        if (p.keeperPriorYearRound === entry.round && !p.rookieDraftInfo) return
+        void patch(p.id, { keeperPriorYearRound: entry.round, rookieDraftInfo: null }, previous)
+        return
+      }
+      void patch(
+        p.id,
+        {
+          keeperPriorYearRound: null,
+          rookieDraftInfo: slotForLastYearRedshirt(entry.round, entry.pick),
+        },
+        previous
+      )
+    },
+    [patch]
+  )
   const pool = useMemo(() => {
     const q = search.trim().toLowerCase()
     return (players ?? [])
@@ -311,30 +360,47 @@ export function AdminRosterManager() {
                         <PlayerName name={p.name} injuryStatus={p.injuryStatus} />
                       </span>
                       <span className="block text-xs text-[var(--color-muted-foreground)] tabular-nums">
-                        {[p.position, p.teamCode, p.salary != null ? fmtM(p.salary) : null]
+                        {[
+                          p.position,
+                          p.teamCode,
+                          p.salary != null ? fmtM(p.salary) : null,
+                          keepers
+                            ? (() => {
+                                const cost = baseKeeperRound(p, currentLeague.config)
+                                return cost != null ? `keeps at Rd ${cost}` : 'no round yet'
+                              })()
+                            : null,
+                        ]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>
                     </span>
                     {keepers ? (
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={20}
-                        value={p.keeperPriorYearRound ?? ''}
-                        placeholder="Rd"
-                        title="Round this player was kept or drafted in last year — sets this year's keeper cost"
-                        aria-label={`Prior keeper round for ${p.name}`}
-                        onChange={(e) =>
-                          patch(
-                            p.id,
-                            { keeperPriorYearRound: e.target.value === '' ? null : Number(e.target.value) },
-                            { keeperPriorYearRound: p.keeperPriorYearRound }
-                          )
-                        }
-                        className="shrink-0 w-14 text-xs px-2 py-1 min-h-[2.5rem] rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)] tabular-nums"
-                      />
+                      slotFromThisBoard(p.rookieDraftInfo, currentLeague.seasonYear) ? (
+                        <span
+                          title="Set on the rookie draft board"
+                          className="shrink-0 w-14 text-xs px-2 py-1 min-h-[2.5rem] inline-flex items-center justify-center rounded border border-[var(--color-border)] text-[var(--color-muted-foreground)] tabular-nums"
+                        >
+                          {formatRoundEntry(p)}
+                        </span>
+                      ) : (
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={roundDrafts[p.id] ?? formatRoundEntry(p)}
+                          placeholder="Rd"
+                          title="Last year's round (4) — this year costs one less. A rookie redshirted last year: her rookie slot (1.4) instead."
+                          aria-label={`Last year's round or rookie slot for ${p.name}`}
+                          onChange={(e) =>
+                            setRoundDrafts((d) => ({ ...d, [p.id]: e.target.value }))
+                          }
+                          onBlur={(e) => commitRound(p, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                          }}
+                          className="shrink-0 w-14 text-xs px-2 py-1 min-h-[2.5rem] rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)] tabular-nums"
+                        />
+                      )
                     ) : null}
                     <select
                       value={p.slot ?? 'active'}
@@ -362,7 +428,9 @@ export function AdminRosterManager() {
                 {currentRoster.length === 0 ? (
                   <li className="text-sm text-[var(--color-muted-foreground)] px-3 py-4">
                     Empty — search on the left and press Enter to add.
-                    {keepers ? ' "Rd" is the round each player was kept or drafted in last year.' : ''}
+                    {keepers
+                      ? ' "Rd" is last year\'s round (4), or the rookie slot (1.4) for a rookie redshirted last year.'
+                      : ''}
                   </li>
                 ) : null}
               </ul>

@@ -113,6 +113,7 @@ export const wnba: SportAdapter = {
   // ESPN publishes no WNBA contracts; Her Hoop Stats does.
   salary: { source: 'herhoopstats' },
   positions: { feed: ['G', 'F', 'C'], defaultShape: [] },
+  rookieClassYear: (seasonYear) => seasonYear,
   calendar: { seasonYear: 2026, seasonStart: '2026-05-11', seasonEnd: '2026-10-18' },
   preset: WNBA_LEAGUE_PRESET,
   branding: {

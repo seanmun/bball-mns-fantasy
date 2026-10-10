@@ -329,6 +329,10 @@ export const mnsPlayers = gameSchema.table(
     intEligible: boolean('int_eligible').notNull().default(false),
     rookieDraftInfo: jsonb('rookie_draft_info').$type<RookieDraftInfo>(),
     keeperPriorYearRound: integer('keeper_prior_year_round'),
+    // The round this player occupied in THIS season's draft: written at
+    // keeper lock (the stacked round) and at draft sync (the board
+    // round). The rollover copies it into keeper_prior_year_round.
+    draftRound: integer('draft_round'),
     keeperDerivedBaseRound: integer('keeper_derived_base_round'),
     migratedKeeperRound: integer('migrated_keeper_round'),
     migrationSource: text('migration_source').$type<MigrationSource>(),

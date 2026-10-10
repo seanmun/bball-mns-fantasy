@@ -83,6 +83,13 @@ export const updatePlayerSchema = z
     slot: z.enum(['active', 'bench', 'ir', 'redshirt', 'international']).optional(),
     position: z.string().trim().min(1).max(20).optional(),
     keeperPriorYearRound: z.number().int().min(1).max(20).nullable().optional(),
+    // A rookie redshirted last year, by her rookie draft slot: priced by
+    // the rookie table this year. This season's rookies get theirs from
+    // the rookie board, not here.
+    rookieDraftInfo: z
+      .object({ round: z.number().int().min(1).max(10), pick: z.number().int().min(1).max(60) })
+      .nullable()
+      .optional(),
     migratedKeeperRound: z.number().int().min(1).max(20).nullable().optional(),
     isRookie: z.boolean().optional(),
     intEligible: z.boolean().optional(),

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../_db.js'
 import { verifyAuth, canManageLeague } from '../../_middleware.js'
 import {
@@ -225,18 +225,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'restart') {
       // Clear the hub board AND the rosters it wrote — a reset board
       // that leaves players assigned would double-assign on the redo.
+      // Exactly the players the board placed go back in the pool;
+      // keepers and anyone the commissioner placed by hand stay.
+      const before = (await getDraftState(draftRow.id)) as {
+        board: Array<{ item: { ref: string } | null }>
+      }
+      const placed = before.board.map((b) => b.item?.ref).filter((r): r is string => !!r)
       await controlDraft(draftRow.id, { action: 'reset' })
-      // Keepers (a prior-year keeper round on file) stay assigned; only
-      // draft-acquired players go back in the pool.
-      await db
-        .update(mnsPlayers)
-        .set({ teamId: null, slot: 'active' })
-        .where(
-          and(
-            eq(mnsPlayers.leagueId, leagueId),
-            sql`${mnsPlayers.keeperPriorYearRound} is null`
-          )
-        )
+      if (placed.length > 0) {
+        await db
+          .update(mnsPlayers)
+          .set({ teamId: null, slot: 'active', draftRound: null })
+          .where(and(eq(mnsPlayers.leagueId, leagueId), inArray(mnsPlayers.id, placed)))
+      }
       await db
         .update(mnsDrafts)
         .set({ status: 'setup', updatedAt: new Date() })
@@ -286,7 +287,7 @@ export async function syncDraftToRosters(leagueId: string, draftId: string) {
   const state = (await getDraftState(draftId)) as {
     draft: { status: string }
     participants: Array<{ id: string; userId: string }>
-    board: Array<{ participantId: string; item: { ref: string } | null }>
+    board: Array<{ participantId: string; round: number; item: { ref: string } | null }>
   }
 
   // participant userId → their team in THIS league.
@@ -304,9 +305,11 @@ export async function syncDraftToRosters(leagueId: string, draftId: string) {
     const uid = userByParticipant.get(slot.participantId)
     const teamId = uid ? teamByUser.get(uid) : null
     if (!teamId) continue
+    // The board round is the round this player occupied: it becomes
+    // his prior-year round at the turn of the year.
     await db
       .update(mnsPlayers)
-      .set({ teamId, slot: 'active' })
+      .set({ teamId, slot: 'active', draftRound: slot.round })
       .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, slot.item.ref)))
     assigned++
   }

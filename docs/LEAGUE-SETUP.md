@@ -14,12 +14,12 @@ Veteran draft = the main 13-round draft run by the hub.
 | # | Step | Where | What it writes | Done when |
 |---|------|-------|----------------|-----------|
 | 0 | Create the league (name only) | `/create` | league row from the sport preset, `leaguePhase = keeper_season`, the sport's pool linked automatically | league exists |
-| 1 | Starting point | Home → checklist | `config.setup` (`entryPhase`, `rosterSource`). Changeable until the season starts | chosen |
+| 1 | Starting point | Home → checklist (a small link once chosen) | `config.setup` (`entryPhase`, `rosterSource`). Changeable until the season starts | chosen |
 | 2 | Teams | `/lm/teams` | teams (names first; owner emails optional; invites HELD until "Send invites"); Edit / Remove per team | every team present |
-| 3 | League settings | `/lm/league` | season dates from the sport's real calendar (fold light weeks), roster shape, aprons toggle + suggested ladder, fees, prize pool, scoring; the rest under Advanced | decisions made |
+| 3 | Settings | `/lm/league` (done once saved: `config.setup.settingsSaved`) | season dates from the sport's real calendar (fold light weeks), roster shape, aprons toggle + suggested ladder, fees, prize pool, scoring; the rest under Advanced | decisions made |
 | 4 | Rosters (imports only) | `/lm/rosters` | `players.team_id`, slot, and the one "Rd" box: `4` = last year's round (costs one less), `1.4` = the rookie slot of a rookie redshirted last year (priced by the rookie table). Row shows "keeps at Rd N" / "no round yet". No roster limits before the season | every rostered player priced |
 | 5 | Rookie draft (keeper leagues) | `/lm/rookie-picks` | board: an order per round AS THE SLOTS WERE BEFORE TRADES; traded picks change hands on the board (`original_team_id` stays). Every pick, live or recorded, stamps `rookieDraftInfo` + `isRookie` and puts the player on the picking team | every pick has a player |
-| 6 | Keepers | `/keepers` (owners), lock in `/lm/rookie-picks` | owners declare (`isKeeper`); commissioner lock writes each keeper's stacked round to `draft_round`, releases everyone else, `leaguePhase = draft` | locked |
+| 6 | Keepers | `/keepers` (owners submit; the commissioner locks there too) | owners declare (`isKeeper`); commissioner lock writes each keeper's stacked round to `draft_round`, releases everyone else, `leaguePhase = draft` | locked |
 | 7 | Veteran draft | `/lm/draft-setup` → hub draft | hub board; sync writes `team_id` and `draft_round` per pick | hub draft complete |
 | 8 | Start the season | Home | `seasonStartedAt`, `leaguePhase = regular_season`; from then the tick runs lineups, scoring, waivers, dues | started |
 
@@ -81,9 +81,9 @@ phase lands on `rookie_draft`. Nobody types rounds in year two.
   `maxKeepers` on `/keepers`; no cost, stacking, plans, compare or
   redshirt / international decisions. The commissioner lock does the
   stacking blind.
-- **The checklist measures the wrong things.** "League settings" is
-  never done; keepers are "done" only as locked + any rookie pick;
-  nothing counts players without a round, rookies without a slot, picks
-  unrecorded, teams without owners, or keepers submitted per team.
+- ~~The checklist measures the wrong things.~~ Fixed Oct 9: every stage
+  has one measured number (teams with owners, settings saved, players
+  unpriced, picks recorded, teams submitted, draft status) and Keepers
+  is its own stage before the veteran draft.
 - **Start the season checks nothing** but the commissioner and "not
   already started".

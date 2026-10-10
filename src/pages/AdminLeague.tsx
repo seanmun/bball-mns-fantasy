@@ -67,7 +67,10 @@ export function AdminLeague() {
     try {
       await apiFetch<League>(`/api/leagues/${currentLeague.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: name.trim(), config }),
+        body: JSON.stringify({
+          name: name.trim(),
+          config: config.setup ? { ...config, setup: { ...config.setup, settingsSaved: true } } : config,
+        }),
       })
       refreshLeagues()
       toast.success('League settings saved')

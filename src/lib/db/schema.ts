@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  real,
   jsonb,
   numeric,
   pgSchema,
@@ -216,6 +217,45 @@ export const mnsSportPlayers = gameSchema.table(
     uniqueIndex('uq_sport_players_espn').on(t.espnId),
     index('idx_sport_players_team').on(t.teamCode),
     index('idx_sport_players_name').on(t.name),
+  ]
+)
+
+// Per-season averages straight from ESPN's athlete stats, ONE row per
+// player per season. The keeper planner needs last season's line in
+// October, before a single box score of the new year exists; this is
+// where it lives. seasonYear follows the league's convention (the
+// season's END year: NBA 2025-26 → 2026, WNBA 2025 → 2025).
+export const mnsSportSeasonAverages = gameSchema.table(
+  'sport_season_averages',
+  {
+    playerId: text('player_id')
+      .notNull()
+      .references(() => mnsSportPlayers.id, { onDelete: 'cascade' }),
+    seasonYear: integer('season_year').notNull(),
+    label: text('label').notNull(), // ESPN's "2025-26" / "2025"
+    gp: integer('gp').notNull().default(0),
+    gs: integer('gs').notNull().default(0),
+    min: real('min').notNull().default(0),
+    pts: real('pts').notNull().default(0),
+    reb: real('reb').notNull().default(0),
+    ast: real('ast').notNull().default(0),
+    stl: real('stl').notNull().default(0),
+    blk: real('blk').notNull().default(0),
+    tov: real('tov').notNull().default(0),
+    fgm: real('fgm').notNull().default(0),
+    fga: real('fga').notNull().default(0),
+    tpm: real('tpm').notNull().default(0),
+    tpa: real('tpa').notNull().default(0),
+    ftm: real('ftm').notNull().default(0),
+    fta: real('fta').notNull().default(0),
+    fgPct: real('fg_pct').notNull().default(0),
+    tpPct: real('tp_pct').notNull().default(0),
+    ftPct: real('ft_pct').notNull().default(0),
+    fetchedAt: timestamp('fetched_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('uq_sport_season_averages').on(t.playerId, t.seasonYear),
+    index('idx_sport_season_averages_season').on(t.seasonYear),
   ]
 )
 

@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useApi } from '../hooks/useApi'
 import { useLeague } from '../contexts/LeagueContext'
-import { Banner, Button, Card, ConfirmPanel, ListRow, PageHeader } from '../ui/components'
+import { Banner, Button, Card, ConfirmPanel, PageHeader } from '../ui/components'
 import { PlayerName } from './InjuryTag'
+import { Slider } from './Slider'
+import { RangeChips, type RangeKey, type StatAvg } from './StatTable'
 import {
   blankEntries,
   blocking,
@@ -18,9 +20,11 @@ import {
 import type { Decision, RosterEntry, SavedScenario } from '../types/roster'
 import type { LeagueConfig } from '../types/leagueConfig'
 
-// Keeper season on My Team, the way MNS ran it: one decision per
-// player, the cap and the fees moving as you go, scenarios to save and
-// compare, the 13 rounds showing who sits where, and one Submit.
+// Keeper season on My Team, built to the approved mockup: every player
+// with last season's line, the price and the stacked round, a decision
+// each, the cap and fees moving as you go, ideas to save and compare,
+// the 13 rounds, and one Submit. Phones get cards; desktops get the
+// sortable table in a slider with its own arrows.
 
 type RosterRow = PlanPlayer & PlanOptions
 interface Payload {
@@ -34,26 +38,37 @@ interface Payload {
   myTeamId: string | null
   myRoster: RosterRow[]
   plan: { entries: RosterEntry[]; status: string; savedScenarios: SavedScenario[] } | null
-  declared: Array<{ teamId: string; teamName: string; status: string; count: number }>
 }
+type Ranges = Record<RangeKey, Record<string, StatAvg> | null>
+type SortKey = 'cat' | 'ppg' | 'rpg' | 'apg' | 'spg' | 'bpg' | 'tpg' | 'tov' | 'fgPct' | 'ftPct' | 'mpg' | 'gp' | 'catD' | 'salary' | 'rd'
 
 const M = 1_000_000
 const fmtM = (n: number) => `$${(n / M).toFixed(1)}M`
 const last = (name: string) => name.split(' ').slice(-1)[0]
+const f1 = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(1))
+const f2 = (v: number | null | undefined) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`)
 
-export function KeeperPlanner({
-  leagueId,
-  teamName,
-  logo,
-}: {
-  leagueId: string
-  teamName: string
-  logo?: string | null
-}) {
+const SORTS: Array<[SortKey, string]> = [
+  ['cat', 'Cat'],
+  ['ppg', 'PTS'],
+  ['rpg', 'REB'],
+  ['apg', 'AST'],
+  ['salary', '$'],
+  ['rd', 'Rd'],
+]
+const COLUMNS: Array<[SortKey, string]> = [
+  ['gp', 'GP'], ['mpg', 'MIN'], ['ppg', 'PTS'], ['rpg', 'REB'], ['apg', 'AST'], ['spg', 'STL'], ['bpg', 'BLK'],
+  ['tpg', '3PM'], ['tov', 'TO'], ['fgPct', 'FG%'], ['ftPct', 'FT%'], ['cat', 'Cat'], ['catD', 'Cat$'],
+]
+
+export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; teamName: string; logo?: string | null }) {
   const { apiFetch } = useApi()
   const { currentLeague } = useLeague()
   const config = currentLeague?.config as LeagueConfig
   const [data, setData] = useState<Payload | null>(null)
+  const [ranges, setRanges] = useState<Ranges | null>(null)
+  const [range, setRange] = useState<RangeKey>('lastSeason')
+  const [sortKey, setSortKey] = useState<SortKey>('cat')
   const [error, setError] = useState<string | null>(null)
   const [entries, setEntries] = useState<RosterEntry[]>([])
   const [scenarioId, setScenarioId] = useState('')
@@ -70,16 +85,20 @@ export function KeeperPlanner({
         setSaveState('saved')
       })
       .catch((e: Error) => setError(e.message))
+    apiFetch<Ranges>(`/api/leagues/${leagueId}/stats`)
+      .then((r) => {
+        setRanges(r)
+        setRange(r.lastSeason ? 'lastSeason' : 'season')
+      })
+      .catch(() => setRanges({ season: {}, last30: {}, last10: {}, lastSeason: null }))
   }, [apiFetch, leagueId, config])
   useEffect(load, [load])
 
-  const ev = useMemo(
-    () => (data ? evaluatePlan(entries, data.myRoster, config) : null),
-    [data, entries, config]
-  )
+  const ev = useMemo(() => (data ? evaluatePlan(entries, data.myRoster, config) : null), [data, entries, config])
   const submitted = data?.plan?.status === 'submitted' || data?.plan?.status === 'adminLocked'
   const inPhase = data?.phase === 'keeper_season'
   const editable = inPhase && !submitted
+  const stat = useCallback((id: string): StatAvg | null => ranges?.[range]?.[id] ?? null, [ranges, range])
 
   // The working plan autosaves, so it is there on the next phone too.
   const timer = useRef<number | null>(null)
@@ -90,10 +109,7 @@ export function KeeperPlanner({
     timer.current = window.setTimeout(async () => {
       setSaveState('saving')
       try {
-        await apiFetch(`/api/leagues/${leagueId}/keepers`, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'save', entries: next }),
-        })
+        await apiFetch(`/api/leagues/${leagueId}/keepers`, { method: 'POST', body: JSON.stringify({ action: 'save', entries: next }) })
         setSaveState('saved')
       } catch (e) {
         setSaveState('dirty')
@@ -101,7 +117,6 @@ export function KeeperPlanner({
       }
     }, 800)
   }
-
   const loadScenario = (id: string) => {
     if (!data) return
     setScenarioId(id)
@@ -109,28 +124,25 @@ export function KeeperPlanner({
     const s = data.plan?.savedScenarios.find((x) => x.scenarioId === id)
     if (s) change(reconcileEntries(s.entries, data.myRoster, config))
   }
-
   const saveScenario = async () => {
-    if (!name.trim()) return toast.error('Give the scenario a name')
+    if (!name.trim()) return toast.error('Give the idea a name')
     setBusy(true)
     try {
       const r = await apiFetch<{ savedScenarios: SavedScenario[] }>(`/api/leagues/${leagueId}/keepers`, {
         method: 'POST',
         body: JSON.stringify({ action: 'scenario', name: name.trim(), entries }),
       })
-      setData((d) => (d && d.plan ? { ...d, plan: { ...d.plan, savedScenarios: r.savedScenarios } } : d))
-      if (data && !data.plan) load()
+      setData((d) => (d ? { ...d, plan: { entries, status: d.plan?.status ?? 'draft', savedScenarios: r.savedScenarios } } : d))
       setScenarioId(r.savedScenarios[r.savedScenarios.length - 1]?.scenarioId ?? '')
+      toast.success(`Saved "${name.trim()}"`)
       setName('')
       setSaveState('saved')
-      toast.success(`Saved "${name.trim()}"`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save the scenario')
+      toast.error(e instanceof Error ? e.message : 'Could not save the idea')
     } finally {
       setBusy(false)
     }
   }
-
   const deleteScenario = async (id: string) => {
     setBusy(true)
     try {
@@ -146,15 +158,11 @@ export function KeeperPlanner({
       setBusy(false)
     }
   }
-
   const submit = async () => {
     setBusy(true)
     try {
       if (timer.current) window.clearTimeout(timer.current)
-      await apiFetch(`/api/leagues/${leagueId}/keepers`, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'submit', entries }),
-      })
+      await apiFetch(`/api/leagues/${leagueId}/keepers`, { method: 'POST', body: JSON.stringify({ action: 'submit', entries }) })
       toast.success('Keepers submitted')
       setConfirm(false)
       load()
@@ -165,25 +173,71 @@ export function KeeperPlanner({
     }
   }
 
-  if (error) return <Banner tone="crit">{error}</Banner>
+  if (error) return <div className="mns-page py-6"><Banner tone="crit">{error}</Banner></div>
   if (!data || !ev) return <div className="mns-page py-6 text-[var(--color-muted-foreground)]">Loading…</div>
 
   const s = ev.summary
   const cap = data.cap
   const fees = data.fees
-  const conflictOf = (p: RosterRow) =>
-    p.baseRound != null &&
-    entries.filter((e) => e.decision === 'KEEP' && e.baseRound === p.baseRound).length > 1
   const entryOf = (id: string) => ev.entries.find((e) => e.playerId === id)
+  const conflictOf = (p: RosterRow) =>
+    p.baseRound != null && entries.filter((e) => e.decision === 'KEEP' && e.baseRound === p.baseRound).length > 1
   const errs = blocking(ev.errors)
   const warns = ev.errors.filter((e) => e.type === 'warning')
-  const allFees: Array<[string, number]> = [
-    [`Franchise tags${s.franchiseTags ? ` (${s.franchiseTags} × $${fees?.franchiseTagFee ?? 0})` : ''}`, s.franchiseTagDues],
-    [`Redshirts${s.redshirtsCount ? ` (${s.redshirtsCount} × $${fees?.redshirtFee ?? 0})` : ''}`, s.redshirtDues],
-    ['First apron fee', s.firstApronFee],
-    [`Second apron${s.overSecondApronByM ? ` (${s.overSecondApronByM}M over)` : ''}`, s.penaltyDues],
-  ]
-  const feeLines = allFees.filter(([, v]) => v > 0)
+  const feeLines: Array<[string, number]> = (
+    [
+      [`Franchise tags${s.franchiseTags ? ` (${s.franchiseTags} × $${fees?.franchiseTagFee ?? 0})` : ''}`, s.franchiseTagDues],
+      [`Redshirts${s.redshirtsCount ? ` (${s.redshirtsCount} × $${fees?.redshirtFee ?? 0})` : ''}`, s.redshirtDues],
+      ['First apron fee', s.firstApronFee],
+      [`Second apron${s.overSecondApronByM ? ` (${s.overSecondApronByM}M over)` : ''}`, s.penaltyDues],
+    ] as Array<[string, number]>
+  ).filter(([, v]) => v > 0)
+  const value = (p: RosterRow): number => {
+    if (sortKey === 'salary') return p.salary ?? 0
+    if (sortKey === 'rd') return -(p.baseRound ?? 99)
+    const st = stat(p.id)
+    const v = st ? (st[sortKey as keyof StatAvg] as number | null | undefined) : null
+    return v ?? -999
+  }
+  const sorted = [...data.myRoster].sort((a, b) => value(b) - value(a) || (b.salary ?? 0) - (a.salary ?? 0))
+  const rangeNote = range === 'lastSeason' ? 'Last season' : range === 'season' ? 'This season so far' : range === 'last30' ? 'Last 30 days' : 'Last 10 days'
+
+  const decisionSelect = (p: RosterRow, d: Decision, compact = false) => (
+    <select
+      value={d}
+      onChange={(e) => change(setDecision(entries, p.id, e.target.value as Decision))}
+      aria-label={`Decision for ${p.name}`}
+      className={`${compact ? 'min-h-[2.5rem]' : 'min-h-[3rem] min-w-[7rem]'} px-2 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]`}
+    >
+      <option value="DROP">Drop</option>
+      <option value="KEEP" disabled={p.baseRound == null}>Keep{p.baseRound == null ? ' (no round)' : ''}</option>
+      <option value="REDSHIRT" disabled={!p.redshirtOk} title={p.redshirtWhy}>Redshirt{!p.redshirtOk ? ' (n/a)' : ''}</option>
+      <option value="INT_STASH" disabled={!p.intStashOk} title={p.intStashWhy}>Int stash{!p.intStashOk ? ' (n/a)' : ''}</option>
+    </select>
+  )
+  const decisionTag = (d: Decision) => (
+    <span className={`text-xs font-bold uppercase tracking-wide ${d === 'KEEP' ? 'text-[var(--color-accent)]' : d === 'DROP' ? 'text-[var(--color-muted-foreground)]' : 'text-[var(--color-key,#ffb000)]'}`}>
+      {d === 'INT_STASH' ? 'Stash' : d.toLowerCase()}
+    </span>
+  )
+  const priority = (p: RosterRow) => (
+    <span className="ml-2 inline-flex gap-1 align-middle">
+      <button onClick={() => change(movePriority(entries, p.id, 'up'))} aria-label={`${p.name} takes the earlier round`} className="px-1.5 min-h-[2rem] rounded border border-[var(--color-border-interactive)] text-[var(--color-accent)]">▲</button>
+      <button onClick={() => change(movePriority(entries, p.id, 'down'))} aria-label={`${p.name} takes the later round`} className="px-1.5 min-h-[2rem] rounded border border-[var(--color-border-interactive)] text-[var(--color-accent)]">▼</button>
+    </span>
+  )
+  const priceText = (p: RosterRow, d: Decision) => {
+    const e = entryOf(p.id)
+    if (p.baseRound == null) return <span className="text-[var(--color-key,#ffb000)]">no round</span>
+    return (
+      <>
+        Rd {p.baseRound}
+        {d === 'KEEP' && e?.keeperRound && e.keeperRound !== p.baseRound ? <span className="text-[var(--color-accent)]"> → takes Rd {e.keeperRound}</span> : null}
+        {d === 'KEEP' && editable && conflictOf(p) ? priority(p) : null}
+      </>
+    )
+  }
+  const rowTone = (d: Decision) => (d === 'KEEP' ? 'border-[var(--color-accent)]' : d === 'DROP' ? 'border-[var(--color-border)]' : 'border-[var(--color-key,#ffb000)]')
 
   return (
     <div className="mns-page py-2 pb-24">
@@ -199,283 +253,255 @@ export function KeeperPlanner({
         }
         status={`Keep up to ${data.maxKeepers}. Decide each player, save ideas to compare, then submit one.`}
       />
-
       {submitted ? (
-        <div className="mb-4">
-          <Banner tone="ok">
-            Submitted. Your keepers are in. The commissioner can unlock if something needs fixing.
-          </Banner>
-        </div>
+        <div className="mb-4"><Banner tone="ok">Submitted. Your keepers are in. The commissioner can unlock if something needs fixing.</Banner></div>
       ) : !inPhase ? (
-        <div className="mb-4">
-          <Banner tone="info">Keeper plans open during keeper season.</Banner>
-        </div>
+        <div className="mb-4"><Banner tone="info">Keeper plans open during keeper season.</Banner></div>
       ) : null}
 
-      {/* The cap, with the aprons and the hard cap marked. */}
-      {cap ? (
-        <Card className="mb-3">
-          <div className="flex items-baseline justify-between text-sm mb-2 tabular-nums">
-            <span>
-              <b>{fmtM(s.capUsed)}</b>
-              <span className="text-[var(--color-muted-foreground)]"> kept salary</span>
-            </span>
-            <span className="text-[var(--color-muted-foreground)]">hard cap {fmtM(cap.hardCap)}</span>
-          </div>
-          <div className="relative h-3 rounded-full bg-[var(--color-background)] border border-[var(--color-border)] overflow-hidden">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.min(100, (s.capUsed / cap.hardCap) * 100)}%`,
-                background:
-                  s.capUsed > cap.secondApron
-                    ? 'var(--color-pick-loss, #ff453a)'
-                    : s.capUsed > cap.firstApron
-                      ? 'var(--color-key, #ffb000)'
-                      : 'var(--color-accent)',
-              }}
-            />
-            {cap.firstApron > 0 ? (
-              <span
-                className="absolute top-0 h-full w-px bg-[var(--color-foreground)]/60"
-                style={{ left: `${(cap.firstApron / cap.hardCap) * 100}%` }}
-                title={`First apron ${fmtM(cap.firstApron)}`}
-              />
-            ) : null}
-            {cap.secondApron > 0 ? (
-              <span
-                className="absolute top-0 h-full w-px bg-[var(--color-foreground)]/60"
-                style={{ left: `${(cap.secondApron / cap.hardCap) * 100}%` }}
-                title={`Second apron ${fmtM(cap.secondApron)}`}
-              />
-            ) : null}
-          </div>
-          <div className="mt-1 flex justify-between text-xs text-[var(--color-muted-foreground)] tabular-nums">
-            <span>{cap.firstApron > 0 ? `first apron ${fmtM(cap.firstApron)}` : ''}</span>
-            <span>{cap.secondApron > 0 ? `second apron ${fmtM(cap.secondApron)}` : ''}</span>
-          </div>
-        </Card>
-      ) : null}
-
-      <Card className="mb-4">
-        <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
-          <div>
-            <div className="text-2xl font-bold">
-              {s.keepersCount}
-              <span className="text-base font-normal text-[var(--color-muted-foreground)]">/{data.maxKeepers}</span>
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-5 lg:items-start">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            {ranges ? <RangeChips value={range} onChange={setRange} hasLastSeason={!!ranges.lastSeason} /> : <span />}
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort by">
+              <span className="text-sm text-[var(--color-muted-foreground)]">Sort</span>
+              {SORTS.map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setSortKey(k)}
+                  aria-pressed={sortKey === k}
+                  className={`min-h-[2.2rem] px-3 rounded-full border text-sm font-semibold ${sortKey === k ? 'border-[var(--color-accent)] text-[var(--color-accent)] bg-[var(--color-accent-soft)]' : 'border-[var(--color-border)] bg-mns-card'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">keepers</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold">
-              {s.redshirtsCount + s.intStashCount}
-            </div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">parked</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">${s.totalFees}</div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">fees</div>
-          </div>
-        </div>
-        {feeLines.length > 0 ? (
-          <ul className="mt-3 text-sm divide-y divide-[var(--color-border)] tabular-nums">
-            {feeLines.map(([label, v]) => (
-              <li key={label} className="flex justify-between py-1">
-                <span className="text-[var(--color-muted-foreground)]">{label}</span>
-                <span>${v}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Card>
 
-      {editable ? (
-        <div className="mb-4 flex items-center gap-2">
-          <label className="text-sm text-[var(--color-muted-foreground)] shrink-0" htmlFor="kp-scenario">
-            Idea
-          </label>
-          <select
-            id="kp-scenario"
-            value={scenarioId}
-            onChange={(e) => loadScenario(e.target.value)}
-            className="flex-1 min-h-[3rem] px-3 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]"
-          >
-            <option value="">Blank slate — everyone dropped</option>
-            {(data.plan?.savedScenarios ?? []).map((sc) => (
-              <option key={sc.scenarioId} value={sc.scenarioId}>
-                {sc.name} — {sc.summary.keepersCount} keepers, {fmtM(sc.summary.capUsed)}, ${sc.summary.totalFees} fees
-              </option>
-            ))}
-          </select>
-          {scenarioId ? (
-            <Button variant="quiet" onClick={() => deleteScenario(scenarioId)} disabled={busy}>
-              Delete
-            </Button>
+          {editable ? (
+            <div className="mb-3 flex items-center gap-2">
+              <label className="text-sm text-[var(--color-muted-foreground)] shrink-0" htmlFor="kp-scenario">Idea</label>
+              <select
+                id="kp-scenario"
+                value={scenarioId}
+                onChange={(e) => loadScenario(e.target.value)}
+                className="flex-1 min-w-0 min-h-[3rem] px-3 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]"
+              >
+                <option value="">Blank slate — everyone dropped</option>
+                {(data.plan?.savedScenarios ?? []).map((sc) => (
+                  <option key={sc.scenarioId} value={sc.scenarioId}>
+                    {sc.name} — {sc.summary.keepersCount} keepers, {fmtM(sc.summary.capUsed)}, ${sc.summary.totalFees} fees
+                  </option>
+                ))}
+              </select>
+              {scenarioId ? <Button variant="quiet" onClick={() => deleteScenario(scenarioId)} disabled={busy}>Delete</Button> : null}
+            </div>
           ) : null}
-        </div>
-      ) : null}
 
-      <ul className="flex flex-col gap-1.5 mb-4">
-        {data.myRoster.map((p) => {
-          const e = entryOf(p.id)
-          const d: Decision = e?.decision ?? 'DROP'
-          const kept = d !== 'DROP'
-          return (
-            <li key={p.id}>
-              <ListRow
-                mine={kept}
-                title={<PlayerName name={p.name} injuryStatus={p.injuryStatus} />}
-                sub={
-                  <span className="tabular-nums">
-                    {[p.position, p.teamCode, p.salary != null ? fmtM(p.salary) : null].filter(Boolean).join(' · ')}
-                    {' · '}
-                    {p.baseRound != null ? (
-                      <span>Rd {p.baseRound}</span>
-                    ) : (
-                      <span className="text-[var(--color-key,#ffb000)]">no round</span>
-                    )}
-                    {d === 'KEEP' && e?.keeperRound && e.keeperRound !== p.baseRound ? (
-                      <span className="text-[var(--color-accent)]"> → takes Rd {e.keeperRound}</span>
-                    ) : null}
-                    {d === 'KEEP' && editable && conflictOf(p) ? (
-                      <span className="ml-2 inline-flex gap-1">
-                        <button
-                          onClick={() => change(movePriority(entries, p.id, 'up'))}
-                          aria-label={`${p.name} takes the earlier round`}
-                          className="px-1.5 min-h-[2rem] rounded border border-[var(--color-border-interactive)] text-[var(--color-accent)]"
-                        >
-                          ▲
-                        </button>
-                        <button
-                          onClick={() => change(movePriority(entries, p.id, 'down'))}
-                          aria-label={`${p.name} takes the later round`}
-                          className="px-1.5 min-h-[2rem] rounded border border-[var(--color-border-interactive)] text-[var(--color-accent)]"
-                        >
-                          ▼
-                        </button>
-                      </span>
-                    ) : null}
-                  </span>
-                }
-                end={
-                  editable ? (
-                    <select
-                      value={d}
-                      onChange={(ev2) => change(setDecision(entries, p.id, ev2.target.value as Decision))}
-                      aria-label={`Decision for ${p.name}`}
-                      className="min-h-[3rem] px-2 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]"
-                    >
-                      <option value="DROP">Drop</option>
-                      <option value="KEEP" disabled={p.baseRound == null}>
-                        Keep{p.baseRound == null ? ' (no round)' : ''}
-                      </option>
-                      <option value="REDSHIRT" disabled={!p.redshirtOk} title={p.redshirtWhy}>
-                        Redshirt{!p.redshirtOk ? ' (n/a)' : ''}
-                      </option>
-                      <option value="INT_STASH" disabled={!p.intStashOk} title={p.intStashWhy}>
-                        Int stash{!p.intStashOk ? ' (n/a)' : ''}
-                      </option>
-                    </select>
+          {/* Phones: a card per player with the line underneath. */}
+          <ul className="lg:hidden flex flex-col gap-2 mb-3">
+            {sorted.map((p) => {
+              const d: Decision = entryOf(p.id)?.decision ?? 'DROP'
+              const st = stat(p.id)
+              return (
+                <li key={p.id} className={`rounded-xl border bg-mns-card px-3 py-2.5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 ${rowTone(d)}`}>
+                  <div className="font-bold text-lg leading-tight">
+                    <PlayerName name={p.name} injuryStatus={p.injuryStatus} />{' '}
+                    <span className="text-sm font-normal text-[var(--color-muted-foreground)] tabular-nums">{p.salary != null ? fmtM(p.salary) : ''}</span>
+                  </div>
+                  <div className="row-span-2 self-start">{editable ? decisionSelect(p, d) : decisionTag(d)}</div>
+                  <div className="text-sm text-[var(--color-muted-foreground)] tabular-nums">
+                    {[p.position, p.teamCode].filter(Boolean).join(' · ')} · <span className="text-[var(--color-foreground)]">{priceText(p, d)}</span>
+                  </div>
+                  {st ? (
+                    <div className="col-span-2 grid grid-cols-5 gap-x-1.5 gap-y-1 mt-1 tabular-nums">
+                      {(
+                        [
+                          [st.ppg, 'PTS'], [st.rpg, 'REB'], [st.apg, 'AST'], [st.spg, 'STL'], [st.bpg, 'BLK'],
+                          [st.tpg, '3PM'], [st.tov, 'TO'], [st.fgPct, 'FG%'], [st.ftPct, 'FT%'],
+                        ] as Array<[number | null | undefined, string]>
+                      ).map(([v, l]) => (
+                        <div key={l} className="flex flex-col items-center rounded-lg bg-[var(--color-muted)] py-1">
+                          <b>{f1(v)}</b>
+                          <span className="text-[0.7rem] tracking-wide text-[var(--color-muted-foreground)]">{l}</span>
+                        </div>
+                      ))}
+                      <div className="flex flex-col items-center rounded-lg bg-[var(--color-muted)] py-1">
+                        <b className={st.cat != null && st.cat > 0 ? 'text-[var(--color-accent)]' : ''}>{f2(st.cat)}</b>
+                        <span className="text-[0.7rem] tracking-wide text-[var(--color-muted-foreground)]">CAT · {st.gp} GP</span>
+                      </div>
+                    </div>
                   ) : (
-                    <span
-                      className={
-                        'text-xs font-bold uppercase tracking-wide ' +
-                        (d === 'KEEP'
-                          ? 'text-[var(--color-accent)]'
-                          : d === 'DROP'
-                            ? 'text-[var(--color-muted-foreground)]'
-                            : 'text-[var(--color-key,#ffb000)]')
-                      }
-                    >
-                      {d === 'INT_STASH' ? 'Stash' : d.toLowerCase()}
-                    </span>
-                  )
-                }
-              />
-            </li>
-          )
-        })}
-      </ul>
+                    <div className="col-span-2 text-sm text-[var(--color-muted-foreground)] mt-1">
+                      {p.rookieDraftInfo
+                        ? `Rookie — no ${rangeNote.toLowerCase()} line. Slot ${p.rookieDraftInfo.round}.${p.rookieDraftInfo.pick} prices him at Rd ${p.baseRound ?? '—'}.`
+                        : `No ${rangeNote.toLowerCase()} line.`}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
 
-      {/* The draft, round by round: who you already hold, what is open. */}
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-[var(--color-muted-foreground)]">
-        Your draft rounds
-      </h2>
-      <ol className="mb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 text-sm">
-        {ev.board.map((b) => (
-          <li
-            key={b.round}
-            className={
-              'rounded-lg border px-2 py-1.5 min-h-[3rem] ' +
-              (b.names.length > 0
-                ? 'border-[var(--color-accent)] bg-mns-card'
-                : 'border-[var(--color-border)] text-[var(--color-muted-foreground)]')
-            }
-          >
-            <span className="tabular-nums font-bold">Rd {b.round}</span>{' '}
-            <span className="block truncate">{b.names.length > 0 ? b.names.map(last).join(', ') : 'open'}</span>
-          </li>
-        ))}
-      </ol>
-
-      {errs.length > 0 || warns.length > 0 ? (
-        <ul className="mb-4 text-sm flex flex-col gap-1">
-          {errs.map((x, i) => (
-            <li key={`e${i}`} className="text-[var(--color-pick-loss,#ff453a)]">{x.message}</li>
-          ))}
-          {warns.map((x, i) => (
-            <li key={`w${i}`} className="text-[var(--color-key,#ffb000)]">{x.message}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {editable ? (
-        <>
-          <div className="mb-4 flex items-end gap-2">
-            <div className="flex-1">
-              <label htmlFor="kp-name" className="block text-sm text-[var(--color-muted-foreground)] mb-1">
-                Save this idea as
-              </label>
-              <input
-                id="kp-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Keep the bigs"
-                className="w-full min-h-[3rem] px-3 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]"
-              />
-            </div>
-            <Button onClick={saveScenario} disabled={busy || !name.trim()}>
-              Save idea
-            </Button>
+          {/* Desktops: the sortable table, in a slider with its own arrows. */}
+          <div className="hidden lg:block mb-3">
+            <Slider label="Scroll stats" className="rounded-xl border border-[var(--color-border)] bg-mns-card">
+              <table className="w-full text-sm tabular-nums">
+                <thead>
+                  <tr className="text-[0.7rem] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                    <th className="sticky left-0 bg-mns-card text-left px-3 py-2">Decision</th>
+                    <th className="text-left px-2 py-2">Player</th>
+                    <th className="text-right px-2 py-2 cursor-pointer" onClick={() => setSortKey('salary')} aria-sort={sortKey === 'salary' ? 'descending' : undefined}>$</th>
+                    <th className="text-right px-2 py-2 cursor-pointer" onClick={() => setSortKey('rd')} aria-sort={sortKey === 'rd' ? 'descending' : undefined}>Rd</th>
+                    <th className="text-right px-2 py-2">Final</th>
+                    {COLUMNS.map(([k, label]) => (
+                      <th key={k} className={`text-right px-2 py-2 cursor-pointer ${sortKey === k ? 'text-[var(--color-accent)]' : ''}`} onClick={() => setSortKey(k)} aria-sort={sortKey === k ? 'descending' : undefined}>
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((p) => {
+                    const d: Decision = entryOf(p.id)?.decision ?? 'DROP'
+                    const e = entryOf(p.id)
+                    const st = stat(p.id)
+                    return (
+                      <tr key={p.id} className="border-t border-[var(--color-border)]">
+                        <td className={`sticky left-0 bg-mns-card px-3 py-1.5 border-l-4 ${rowTone(d)}`}>{editable ? decisionSelect(p, d, true) : decisionTag(d)}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          <b><PlayerName name={p.name} injuryStatus={p.injuryStatus} /></b>
+                          <div className="text-xs text-[var(--color-muted-foreground)]">{[p.position, p.teamCode].filter(Boolean).join(' · ')}</div>
+                        </td>
+                        <td className="text-right px-2 py-1.5">{p.salary != null ? fmtM(p.salary) : '—'}</td>
+                        <td className="text-right px-2 py-1.5">{p.baseRound ?? <span className="text-[var(--color-key,#ffb000)]">none</span>}</td>
+                        <td className="text-right px-2 py-1.5 whitespace-nowrap">
+                          {d === 'KEEP' && e?.keeperRound ? <b className="text-[var(--color-accent)]">{e.keeperRound}</b> : '—'}
+                          {d === 'KEEP' && editable && conflictOf(p) ? priority(p) : null}
+                        </td>
+                        {st ? (
+                          COLUMNS.map(([k]) => {
+                            const v = st[k as keyof StatAvg] as number | null | undefined
+                            return (
+                              <td key={k} className={`text-right px-2 py-1.5 ${k === 'cat' && v != null && v > 0 ? 'text-[var(--color-accent)] font-bold' : ''}`}>
+                                {k === 'gp' ? (v ?? '—') : k === 'cat' ? f2(v) : k === 'catD' ? (v == null ? '—' : v.toFixed(2)) : f1(v)}
+                              </td>
+                            )
+                          })
+                        ) : (
+                          <td colSpan={COLUMNS.length} className="px-2 py-1.5 text-left text-[var(--color-muted-foreground)]">
+                            {p.rookieDraftInfo ? `Rookie — no ${rangeNote.toLowerCase()} line. Slot ${p.rookieDraftInfo.round}.${p.rookieDraftInfo.pick} prices him at Rd ${p.baseRound ?? '—'}.` : `No ${rangeNote.toLowerCase()} line.`}
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </Slider>
           </div>
-          {confirm ? (
-            <ConfirmPanel
-              title={`Submit ${s.keepersCount} keeper${s.keepersCount === 1 ? '' : 's'}?`}
-              detail="This is your declaration. It locks for you; the commissioner can unlock it."
-              confirmLabel="Submit final keepers"
-              pending={busy}
-              onConfirm={submit}
-              onCancel={() => setConfirm(false)}
-            />
-          ) : (
-            <Button full onClick={() => setConfirm(true)} disabled={busy || errs.length > 0}>
-              Submit final keepers
-            </Button>
-          )}
-          <p className="mt-2 text-xs text-[var(--color-muted-foreground)] text-center">
-            {saveState === 'saving' ? 'Saving…' : saveState === 'dirty' ? 'Unsaved changes' : 'Plan saved'} ·{' '}
-            <Link to={`/league/${leagueId}/keepers`} className="underline">
-              who has submitted
-            </Link>
+          <p className="text-xs text-[var(--color-muted-foreground)] mb-3">
+            {rangeNote}. Cat = mean z-score across the nine categories against the league pool. Cat$ = Cat per $1M.
           </p>
-        </>
-      ) : (
-        <p className="text-xs text-[var(--color-muted-foreground)] text-center">
-          <Link to={`/league/${leagueId}/keepers`} className="underline">
-            who has submitted
-          </Link>
-        </p>
-      )}
+
+          {errs.length > 0 || warns.length > 0 ? (
+            <ul className="mb-4 text-sm flex flex-col gap-1">
+              {errs.map((x, i) => <li key={`e${i}`} className="text-[var(--color-pick-loss,#ff453a)]">{x.message}</li>)}
+              {warns.map((x, i) => <li key={`w${i}`} className="text-[var(--color-key,#ffb000)]">{x.message}</li>)}
+            </ul>
+          ) : null}
+
+          {editable ? (
+            <>
+              <div className="mb-4 flex items-end gap-2">
+                <div className="flex-1">
+                  <label htmlFor="kp-name" className="block text-sm text-[var(--color-muted-foreground)] mb-1">Save this idea as</label>
+                  <input
+                    id="kp-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Keep the bigs"
+                    className="w-full min-h-[3rem] px-3 rounded bg-[var(--color-background)] border border-[var(--color-border-interactive)] text-[var(--color-foreground)]"
+                  />
+                </div>
+                <Button variant="quiet" onClick={saveScenario} disabled={busy || !name.trim()}>Save idea</Button>
+              </div>
+              {confirm ? (
+                <ConfirmPanel
+                  title={`Submit ${s.keepersCount} keeper${s.keepersCount === 1 ? '' : 's'}?`}
+                  detail="This is your declaration. It locks for you; the commissioner can unlock it."
+                  confirmLabel="Submit final keepers"
+                  pending={busy}
+                  onConfirm={submit}
+                  onCancel={() => setConfirm(false)}
+                />
+              ) : (
+                <Button full onClick={() => setConfirm(true)} disabled={busy || errs.length > 0}>Submit final keepers</Button>
+              )}
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)] text-center">
+                {saveState === 'saving' ? 'Saving…' : saveState === 'dirty' ? 'Unsaved changes' : 'Plan saved'} ·{' '}
+                <Link to={`/league/${leagueId}/keepers`} className="underline">who has submitted</Link>
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-[var(--color-muted-foreground)] text-center">
+              <Link to={`/league/${leagueId}/keepers`} className="underline">who has submitted</Link>
+            </p>
+          )}
+        </div>
+
+        <aside className="flex flex-col gap-3 mt-4 lg:mt-0 lg:sticky lg:top-4">
+          {cap ? (
+            <Card>
+              <div className="flex items-baseline justify-between text-sm mb-2 tabular-nums">
+                <span><b>{fmtM(s.capUsed)}</b> <span className="text-[var(--color-muted-foreground)]">kept salary</span></span>
+                <span className="text-[var(--color-muted-foreground)]">hard cap {fmtM(cap.hardCap)}</span>
+              </div>
+              <div className="relative h-3 rounded-full bg-[var(--color-background)] border border-[var(--color-border)] overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (s.capUsed / cap.hardCap) * 100)}%`,
+                    background: s.capUsed > cap.secondApron ? 'var(--color-pick-loss, #ff453a)' : s.capUsed > cap.firstApron ? 'var(--color-key, #ffb000)' : 'var(--color-accent)',
+                  }}
+                />
+                {cap.firstApron > 0 ? <span className="absolute top-0 h-full w-0.5 bg-[var(--color-foreground)] opacity-60" style={{ left: `${(cap.firstApron / cap.hardCap) * 100}%` }} title={`First apron ${fmtM(cap.firstApron)}`} /> : null}
+                {cap.secondApron > 0 ? <span className="absolute top-0 h-full w-0.5 bg-[var(--color-foreground)] opacity-60" style={{ left: `${(cap.secondApron / cap.hardCap) * 100}%` }} title={`Second apron ${fmtM(cap.secondApron)}`} /> : null}
+              </div>
+              <div className="mt-1 flex justify-between text-xs text-[var(--color-muted-foreground)] tabular-nums">
+                <span>{cap.firstApron > 0 ? `first apron ${fmtM(cap.firstApron)}` : ''}</span>
+                <span>{cap.secondApron > 0 ? `second apron ${fmtM(cap.secondApron)}` : ''}</span>
+              </div>
+            </Card>
+          ) : null}
+          <Card>
+            <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
+              <div><div className="text-2xl font-bold">{s.keepersCount}<span className="text-base font-normal text-[var(--color-muted-foreground)]">/{data.maxKeepers}</span></div><div className="text-xs text-[var(--color-muted-foreground)]">keepers</div></div>
+              <div><div className="text-2xl font-bold">{s.redshirtsCount + s.intStashCount}</div><div className="text-xs text-[var(--color-muted-foreground)]">parked</div></div>
+              <div><div className="text-2xl font-bold">${s.totalFees}</div><div className="text-xs text-[var(--color-muted-foreground)]">fees</div></div>
+            </div>
+            {feeLines.length > 0 ? (
+              <ul className="mt-3 text-sm divide-y divide-[var(--color-border)] tabular-nums">
+                {feeLines.map(([label, v]) => <li key={label} className="flex justify-between py-1"><span className="text-[var(--color-muted-foreground)]">{label}</span><span>${v}</span></li>)}
+              </ul>
+            ) : null}
+          </Card>
+          <div>
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-[var(--color-muted-foreground)]">Your draft rounds</h2>
+            <ol className="grid grid-cols-2 lg:grid-cols-1 gap-1.5 text-sm">
+              {ev.board.map((b) => {
+                const tag = b.names.length > 0 && b.round !== 1 && ev.entries.some((e) => e.decision === 'KEEP' && e.keeperRound === b.round && e.baseRound === 1)
+                return (
+                  <li key={b.round} className={`rounded-lg border px-2 py-1.5 min-h-[3rem] ${b.names.length > 0 ? `bg-mns-card ${tag ? 'border-[var(--color-key,#ffb000)]' : 'border-[var(--color-accent)]'}` : 'border-[var(--color-border)] text-[var(--color-muted-foreground)]'}`}>
+                    <b className="block text-[0.7rem] uppercase tracking-wider">Rd {b.round}{tag ? ' · franchise tag' : ''}</b>
+                    <span className="block truncate">{b.names.length > 0 ? b.names.map(last).join(', ') : 'open'}</span>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }

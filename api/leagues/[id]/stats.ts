@@ -3,6 +3,7 @@ import { verifyAuth } from '../../_middleware.js'
 import { db } from '../../_db.js'
 import { eq } from 'drizzle-orm'
 import {
+  mnsLeagues,
   mnsPlayers,
   mnsSportPlayers,
 } from '../../../src/lib/db/schema.js'
@@ -11,8 +12,9 @@ import { logger } from '../../_logger.js'
 
 // GET /api/leagues/:id/stats — per-player averages for every research
 // window at once (season, last 30 days, last 10 days, last season), so
-// the client flips ranges instantly. lastSeason comes back null when
-// no prior-year lines exist.
+// the client flips ranges instantly. lastSeason comes from the sport's
+// per-season averages when no prior-year lines exist, and is null only
+// when those are missing too.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const userId = await verifyAuth(req)
@@ -20,7 +22,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const leagueId = String(req.query.id ?? '')
   try {
-    const ranges = await averagesForRanges(db, leagueId)
+    const [league] = await db
+      .select({ seasonYear: mnsLeagues.seasonYear })
+      .from(mnsLeagues)
+      .where(eq(mnsLeagues.id, leagueId))
+      .limit(1)
+    const ranges = await averagesForRanges(db, leagueId, new Date(), league?.seasonYear)
     // CAT$ — Cat Score per $1M of salary, the value-density number.
     const salaries = await db
       .select({ id: mnsPlayers.id, salary: mnsSportPlayers.salary })

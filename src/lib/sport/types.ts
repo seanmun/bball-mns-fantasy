@@ -37,6 +37,9 @@ export interface SportAdapter {
   // NBA's 2026-27 season (seasonYear 2027) drafts the class of 2026; the
   // WNBA drafts in April of the season itself.
   rookieClassYear(seasonYear: number): number
+  // ESPN's name for a season, by the league's season year (its END
+  // year): NBA 2026 → "2025-26", WNBA 2025 → "2025".
+  espnSeasonLabel(seasonYear: number): string
   calendar: {
     seasonYear: number
     seasonStart: string // YYYY-MM-DD, first regular-season day

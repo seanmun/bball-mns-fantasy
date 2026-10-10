@@ -9,6 +9,7 @@ import { config } from 'dotenv'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { syncCalendarMonth, syncInjuries, syncRosters, syncSalariesScraped, syncStatLines } from '../src/lib/season/sportSync.js'
+import { syncSeasonAverages } from '../src/lib/season/seasonAverages.js'
 import { easternToday } from '../src/lib/season/score.js'
 import { sport } from '../src/lib/sport/index.js'
 
@@ -30,6 +31,20 @@ if (process.argv.includes('--calendar')) {
     `select count(*)::int as days, sum(games)::int as games, min(date) as first, max(date) as last from ${sport.schema}.sport_game_days`
   )) as Record<string, unknown>[]
   console.log('sport_game_days:', JSON.stringify(c))
+  process.exit(0)
+}
+// --season-averages: last season's line for every player with an ESPN
+// id, all at once (the tick does 60 per run), then stop.
+if (process.argv.includes('--season-averages')) {
+  const seasonYear = sport.calendar.seasonYear - 1
+  console.time('season averages')
+  const r = await syncSeasonAverages(db, seasonYear, { limit: 5000, concurrency: 6 })
+  console.timeEnd('season averages')
+  console.log('season averages:', JSON.stringify(r))
+  const [c] = (await client.query(
+    `select count(*)::int as rows, count(*) filter (where gp > 0)::int as with_line, min(label) as label from ${sport.schema}.sport_season_averages where season_year = ${seasonYear}`
+  )) as Record<string, unknown>[]
+  console.log('sport_season_averages:', JSON.stringify(c))
   process.exit(0)
 }
 if (dates.length === 0) dates.push(easternToday(new Date(now.getTime() - 86400000)), easternToday(now))

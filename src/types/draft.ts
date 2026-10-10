@@ -82,6 +82,7 @@ export interface RookieDraftPickRow {
   pickInRound: number
   overallPick: number
   teamId: string
+  originalTeamId: string | null
   playerId: string | null
   playerName: string | null
   createdAt: string

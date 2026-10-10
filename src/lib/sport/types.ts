@@ -23,8 +23,11 @@ export interface SportAdapter {
   presence(athlete: { jersey?: string | null }): 'rostered' | 'rights_only'
   // Where salaries come from. The server picks the implementation.
   salary: {
-    source: 'herhoopstats' | 'espn-contracts'
-    // What a player carries when the source has no number for them.
+    source: 'herhoopstats' | 'espn-contracts' | 'bbref'
+    // A second source that fills players the first one lacks, never
+    // overwriting the first's figure for the same season.
+    fallback?: 'espn-contracts'
+    // What a player carries when no source has a number for them.
     minimum?: number
   }
   positions: {

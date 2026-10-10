@@ -193,6 +193,13 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
       [`Second apron${s.overSecondApronByM ? ` (${s.overSecondApronByM}M over)` : ''}`, s.penaltyDues],
     ] as Array<[string, number]>
   ).filter(([, v]) => v > 0)
+  // Money in plain terms: what a keeper costs on average, and what is
+  // left per open roster spot under each line the league uses.
+  const rosterSize = config.roster?.activeSize ?? 13
+  const openSpots = Math.max(0, rosterSize - s.keepersCount)
+  const avgKeeper = s.keepersCount > 0 ? s.capUsed / s.keepersCount : null
+  const perSpot = (line: number) => (openSpots > 0 ? (line - s.capUsed) / openSpots : null)
+  const salaryCeil = Math.max(1, ...data.myRoster.map((p) => p.salary ?? 0))
   const value = (p: RosterRow): number => {
     if (sortKey === 'salary') return p.salary ?? 0
     if (sortKey === 'rd') return -(p.baseRound ?? 99)
@@ -367,7 +374,19 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                             </div>
                           </div>
                         </td>
-                        <td className="text-right px-2 py-1.5">{p.salary != null ? fmtM(p.salary) : '—'}</td>
+                        <td className="relative isolate text-right px-2 py-1.5 overflow-hidden">
+                          {p.salary != null ? (
+                            <span
+                              aria-hidden
+                              className="absolute inset-y-0 left-0 -z-10 pointer-events-none"
+                              style={{
+                                width: `${Math.max(2, ((p.salary ?? 0) / salaryCeil) * 100)}%`,
+                                background: 'linear-gradient(to right, color-mix(in srgb, var(--color-accent) 18%, transparent) 70%, transparent)',
+                              }}
+                            />
+                          ) : null}
+                          {p.salary != null ? fmtM(p.salary) : '—'}
+                        </td>
                         <td className="text-right px-2 py-1.5">{p.baseRound ?? <span className="text-[var(--color-key,#ffb000)]">none</span>}</td>
                         <td className="text-right px-2 py-1.5 whitespace-nowrap">
                           {d === 'KEEP' && e?.keeperRound ? <b className="text-[var(--color-accent)]">{e.keeperRound}</b> : '—'}
@@ -480,6 +499,32 @@ export function KeeperPlanner({ leagueId, teamName, logo }: { leagueId: string; 
                 {feeLines.map(([label, v]) => <li key={label} className="flex justify-between py-1"><span className="text-[var(--color-muted-foreground)]">{label}</span><span>${v}</span></li>)}
               </ul>
             ) : null}
+            <ul className="mt-3 text-sm divide-y divide-[var(--color-border)] tabular-nums border-t border-[var(--color-border)]">
+              <li className="flex justify-between py-1">
+                <span className="text-[var(--color-muted-foreground)]">Average per keeper</span>
+                <span>{avgKeeper != null ? fmtM(avgKeeper) : '—'}</span>
+              </li>
+              {cap ? (
+                <>
+                  <li className="flex justify-between py-1">
+                    <span className="text-[var(--color-muted-foreground)]">Left per open spot, to first apron</span>
+                    <span className={perSpot(cap.firstApron) != null && perSpot(cap.firstApron)! < 0 ? 'text-[var(--color-pick-loss,#ff453a)]' : ''}>
+                      {perSpot(cap.firstApron) != null ? fmtM(perSpot(cap.firstApron)!) : '—'}
+                    </span>
+                  </li>
+                  <li className="flex justify-between py-1">
+                    <span className="text-[var(--color-muted-foreground)]">Left per open spot, to hard cap</span>
+                    <span className={perSpot(cap.hardCap) != null && perSpot(cap.hardCap)! < 0 ? 'text-[var(--color-pick-loss,#ff453a)]' : ''}>
+                      {perSpot(cap.hardCap) != null ? fmtM(perSpot(cap.hardCap)!) : '—'}
+                    </span>
+                  </li>
+                </>
+              ) : null}
+              <li className="flex justify-between py-1 text-xs text-[var(--color-muted-foreground)]">
+                <span>Open spots</span>
+                <span>{openSpots} of {rosterSize}</span>
+              </li>
+            </ul>
           </Card>
           <div>
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-[var(--color-muted-foreground)]">Your draft rounds</h2>

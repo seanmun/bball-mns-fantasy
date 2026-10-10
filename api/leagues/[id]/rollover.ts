@@ -6,6 +6,9 @@ import { inArray } from 'drizzle-orm'
 import { mnsLeagues, mnsPlayers, mnsWaiverClaims } from '../../../src/lib/db/schema.js'
 import { logger } from '../../_logger.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
+import type { PlayerSlot } from '../../../src/types/player.js'
+import { carryKeeperFields } from '../../../src/rules/rookieSlots.js'
+import { writeCarry } from '../../../src/lib/players/carry.js'
 
 // The turn of the year, a COMMISSIONER act from the champion phase:
 // season year advances, the cap ladder grows by the configured annual
@@ -69,6 +72,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .where(eq(mnsLeagues.id, leagueId))
 
+    // Every player's next-season starting point: the round she actually
+    // occupied becomes her prior-year round, a redshirted rookie carries
+    // her slot, a free agent carries nothing. Before the slot reset
+    // below, which is what tells a redshirt apart.
+    const players = await db
+      .select({
+        id: mnsPlayers.id,
+        teamId: mnsPlayers.teamId,
+        slot: mnsPlayers.slot,
+        rookieDraftInfo: mnsPlayers.rookieDraftInfo,
+        keeperPriorYearRound: mnsPlayers.keeperPriorYearRound,
+        migratedKeeperRound: mnsPlayers.migratedKeeperRound,
+        draftRound: mnsPlayers.draftRound,
+      })
+      .from(mnsPlayers)
+      .where(eq(mnsPlayers.leagueId, leagueId))
+    await writeCarry(
+      db,
+      leagueId,
+      players.map((p) => ({
+        id: p.id,
+        ...carryKeeperFields({ ...p, slot: p.slot as PlayerSlot }, config),
+      }))
+    )
     // Redshirts and stashes are single-season parks: the new year
     // starts everyone active, and eligibility is re-derived from the
     // fresh years-pro and presence the bios pass reads.

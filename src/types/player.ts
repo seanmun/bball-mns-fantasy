@@ -21,6 +21,9 @@ export interface RookieDraftInfo {
   pick: number
   redshirtEligible: boolean
   redshirtedLastYear?: boolean
+  // The league season this slot was drafted for (the rookie board's
+  // seasonYear). Absent on a slot typed by hand for last year's redshirt.
+  seasonYear?: number
 }
 
 export interface Player {
@@ -48,6 +51,9 @@ export interface Player {
   intEligible: boolean
   rookieDraftInfo: RookieDraftInfo | null
   keeperPriorYearRound: number | null
+  // The round this player occupied in THIS season's draft — kept there
+  // or picked there. Becomes keeperPriorYearRound at the turn of the year.
+  draftRound?: number | null
   keeperDerivedBaseRound: number | null
   migratedKeeperRound: number | null
   migrationSource: MigrationSource | null

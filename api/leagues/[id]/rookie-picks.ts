@@ -16,6 +16,7 @@ import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 import { setRookiePicksSchema, parseBody } from '../../_validation.js'
 import { logger } from '../../_logger.js'
 import type { RookieDraftPickRow } from '../../../src/types/draft.js'
+import { slotForBoardPick } from '../../../src/rules/rookieSlots.js'
 
 function mapPickRow(
   row: typeof mnsRookieDraftPicks.$inferSelect
@@ -81,6 +82,9 @@ async function handleGet(res: VercelResponse, leagueId: string) {
 // POST { action: 'pick', pickId, playerId } — the owner on the clock
 // (or the commissioner) drafts a player; the last pick advances the
 // league to keepers (or straight to the draft).
+// POST { action: 'record', pickId, playerId } — commissioner: write down
+// a pick of a draft that already happened, any order, until the season
+// starts. POST { action: 'clear', pickId } empties one.
 async function handlePost(
   req: VercelRequest,
   res: VercelResponse,
@@ -162,10 +166,7 @@ async function handlePost(
       return res.status(200).json(rows.sort((a, b) => a.overallPick - b.overallPick).map(mapPickRow))
     }
 
-    if (action === 'pick') {
-      if (league.leaguePhase !== 'rookie_draft') {
-        return res.status(400).json({ error: 'The rookie draft is not running.' })
-      }
+    if (action === 'pick' || action === 'record') {
       const pickId = String(req.body?.pickId ?? '')
       const playerId = String(req.body?.playerId ?? '')
       const [pick] = await db
@@ -174,80 +175,181 @@ async function handlePost(
         .where(and(eq(mnsRookieDraftPicks.leagueId, leagueId), eq(mnsRookieDraftPicks.id, pickId)))
         .limit(1)
       if (!pick) return res.status(404).json({ error: 'Pick not found.' })
-      if (pick.playerId) return res.status(409).json({ error: 'That pick is already made.' })
-
-      // Only the pick ON THE CLOCK moves — the lowest unfilled overall.
-      const [onClock] = await db
-        .select()
-        .from(mnsRookieDraftPicks)
-        .where(
-          and(
-            eq(mnsRookieDraftPicks.leagueId, leagueId),
-            eq(mnsRookieDraftPicks.seasonYear, league.seasonYear),
-            sql`${mnsRookieDraftPicks.playerId} is null`
-          )
-        )
-        .orderBy(mnsRookieDraftPicks.overallPick)
-        .limit(1)
-      if (!onClock || onClock.id !== pick.id) {
-        return res.status(409).json({ error: 'That pick is not on the clock yet.' })
-      }
-
       const isCommish = await canManageLeague(userId, leagueId)
-      if (!isCommish) {
-        const owners = await db
+
+      if (action === 'pick') {
+        // Live: the pick ON THE CLOCK, during the rookie draft, by its
+        // owner (or the commissioner).
+        if (league.leaguePhase !== 'rookie_draft') {
+          return res.status(400).json({ error: 'The rookie draft is not running.' })
+        }
+        if (pick.playerId) return res.status(409).json({ error: 'That pick is already made.' })
+        const [onClock] = await db
           .select()
-          .from(mnsTeamOwners)
-          .where(eq(mnsTeamOwners.teamId, pick.teamId))
-        if (!owners.some((o) => o.userId === userId)) {
-          return res.status(403).json({ error: "This pick isn't yours to make." })
+          .from(mnsRookieDraftPicks)
+          .where(
+            and(
+              eq(mnsRookieDraftPicks.leagueId, leagueId),
+              eq(mnsRookieDraftPicks.seasonYear, league.seasonYear),
+              sql`${mnsRookieDraftPicks.playerId} is null`
+            )
+          )
+          .orderBy(mnsRookieDraftPicks.overallPick)
+          .limit(1)
+        if (!onClock || onClock.id !== pick.id) {
+          return res.status(409).json({ error: 'That pick is not on the clock yet.' })
+        }
+        if (!isCommish) {
+          const owners = await db
+            .select()
+            .from(mnsTeamOwners)
+            .where(eq(mnsTeamOwners.teamId, pick.teamId))
+          if (!owners.some((o) => o.userId === userId)) {
+            return res.status(403).json({ error: "This pick isn't yours to make." })
+          }
+        }
+      } else {
+        // Record: the commissioner writes down a draft that already
+        // happened — any pick, any order, re-doable — until the season
+        // starts. The board is the authority on where a rookie belongs.
+        if (!isCommish) {
+          return res.status(403).json({ error: 'Only the commissioner can record picks.' })
+        }
+        if (league.seasonStartedAt) {
+          return res.status(400).json({ error: 'The season has started — the rookie draft is history now.' })
         }
       }
 
-      // First-tap-wins on the player, same guard as the waiver wire.
       const [picked] = await leaguePlayers(db)
         .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
         .limit(1)
       if (!picked) return res.status(404).json({ error: 'That player is not in this league.' })
-      const took = await db
-        .update(mnsPlayers)
-        .set({ teamId: pick.teamId, slot: 'active' })
-        .where(
-          and(
-            eq(mnsPlayers.leagueId, leagueId),
-            eq(mnsPlayers.id, playerId),
-            sql`${mnsPlayers.teamId} is null`
+
+      // Every pick, live or recorded, stamps the slot on the player: that
+      // is what prices a rookie by the rookie table instead of minus-one,
+      // and what puts redshirt on the table for her.
+      const stamp = {
+        teamId: pick.teamId,
+        slot: 'active' as const,
+        rookieDraftInfo: slotForBoardPick(pick, pick.seasonYear),
+        isRookie: true,
+        updatedAt: new Date(),
+      }
+      if (action === 'pick') {
+        // First-tap-wins on the player, same guard as the waiver wire.
+        const took = await db
+          .update(mnsPlayers)
+          .set(stamp)
+          .where(
+            and(
+              eq(mnsPlayers.leagueId, leagueId),
+              eq(mnsPlayers.id, playerId),
+              sql`${mnsPlayers.teamId} is null`
+            )
           )
-        )
-        .returning({ id: mnsPlayers.id })
-      if (took.length === 0) {
-        return res.status(409).json({ error: 'That player is gone — pick another.' })
+          .returning({ id: mnsPlayers.id })
+        if (took.length === 0) {
+          return res.status(409).json({ error: 'That player is gone — pick another.' })
+        }
+      } else {
+        // A different player recorded here before keeps his team, loses
+        // the slot. The same player recorded elsewhere leaves that pick.
+        if (pick.playerId && pick.playerId !== playerId) {
+          await db
+            .update(mnsPlayers)
+            .set({ rookieDraftInfo: null, updatedAt: new Date() })
+            .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, pick.playerId)))
+        }
+        await db
+          .update(mnsRookieDraftPicks)
+          .set({ playerId: null, playerName: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(mnsRookieDraftPicks.leagueId, leagueId),
+              eq(mnsRookieDraftPicks.seasonYear, pick.seasonYear),
+              eq(mnsRookieDraftPicks.playerId, playerId),
+              sql`${mnsRookieDraftPicks.id} <> ${pick.id}`
+            )
+          )
+        await db
+          .update(mnsPlayers)
+          .set(stamp)
+          .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, playerId)))
       }
       await db
         .update(mnsRookieDraftPicks)
         .set({ playerId, playerName: picked.name, updatedAt: new Date() })
         .where(eq(mnsRookieDraftPicks.id, pick.id))
 
-      // Last pick made → the year rolls forward.
-      const [remaining] = await db
-        .select({ n: sql<number>`count(*)` })
-        .from(mnsRookieDraftPicks)
-        .where(
-          and(
-            eq(mnsRookieDraftPicks.leagueId, leagueId),
-            eq(mnsRookieDraftPicks.seasonYear, league.seasonYear),
-            sql`${mnsRookieDraftPicks.playerId} is null`
-          )
-        )
-      let nextPhase: 'keeper_season' | 'draft' | null = null
-      if (Number(remaining?.n ?? 0) === 0) {
-        nextPhase = (config.roster?.maxKeepers ?? 0) > 0 ? 'keeper_season' : 'draft'
-        await db
-          .update(mnsLeagues)
-          .set({ leaguePhase: nextPhase, updatedAt: new Date() })
-          .where(eq(mnsLeagues.id, leagueId))
+      // Recording moved him off another team? Say so by name.
+      let movedFrom: string | null = null
+      if (picked.teamId && picked.teamId !== pick.teamId) {
+        const [from] = await db
+          .select({ name: mnsTeams.name })
+          .from(mnsTeams)
+          .where(eq(mnsTeams.id, picked.teamId))
+          .limit(1)
+        movedFrom = from?.name ?? null
       }
-      return res.status(200).json({ ok: true, picked: picked.name, nextPhase })
+
+      // Last pick made during a live rookie draft → the year rolls
+      // forward. A recorded board never moves the phase on its own.
+      let nextPhase: 'keeper_season' | 'draft' | null = null
+      if (league.leaguePhase === 'rookie_draft') {
+        const [remaining] = await db
+          .select({ n: sql<number>`count(*)` })
+          .from(mnsRookieDraftPicks)
+          .where(
+            and(
+              eq(mnsRookieDraftPicks.leagueId, leagueId),
+              eq(mnsRookieDraftPicks.seasonYear, league.seasonYear),
+              sql`${mnsRookieDraftPicks.playerId} is null`
+            )
+          )
+        if (Number(remaining?.n ?? 0) === 0) {
+          nextPhase = (config.roster?.maxKeepers ?? 0) > 0 ? 'keeper_season' : 'draft'
+          await db
+            .update(mnsLeagues)
+            .set({ leaguePhase: nextPhase, updatedAt: new Date() })
+            .where(eq(mnsLeagues.id, leagueId))
+        }
+      }
+      return res.status(200).json({
+        ok: true,
+        picked: picked.name,
+        slot: `${pick.round}.${pick.pickInRound}`,
+        movedFrom,
+        nextPhase,
+      })
+    }
+
+    // POST { action: 'clear', pickId } — commissioner: the pick empties
+    // and the player loses the slot; he stays on his team.
+    if (action === 'clear') {
+      if (!(await canManageLeague(userId, leagueId))) {
+        return res.status(403).json({ error: 'Only the commissioner can clear picks.' })
+      }
+      if (league.seasonStartedAt) {
+        return res.status(400).json({ error: 'The season has started — the rookie draft is history now.' })
+      }
+      const pickId = String(req.body?.pickId ?? '')
+      const [pick] = await db
+        .select()
+        .from(mnsRookieDraftPicks)
+        .where(and(eq(mnsRookieDraftPicks.leagueId, leagueId), eq(mnsRookieDraftPicks.id, pickId)))
+        .limit(1)
+      if (!pick) return res.status(404).json({ error: 'Pick not found.' })
+      if (pick.playerId) {
+        await db
+          .update(mnsPlayers)
+          .set({ rookieDraftInfo: null, updatedAt: new Date() })
+          .where(and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.id, pick.playerId)))
+      }
+      await db
+        .update(mnsRookieDraftPicks)
+        .set({ playerId: null, playerName: null, updatedAt: new Date() })
+        .where(eq(mnsRookieDraftPicks.id, pick.id))
+      return res.status(200).json({ ok: true })
     }
 
     return res.status(400).json({ error: `Unknown action: ${action}` })

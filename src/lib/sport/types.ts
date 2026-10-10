@@ -33,6 +33,10 @@ export interface SportAdapter {
     // The lineup shape a new league starts with; empty = all-flex.
     defaultShape: Array<{ code: string; count: number }>
   }
+  // The draft class a league season's rookies come from, for copy: the
+  // NBA's 2026-27 season (seasonYear 2027) drafts the class of 2026; the
+  // WNBA drafts in April of the season itself.
+  rookieClassYear(seasonYear: number): number
   calendar: {
     seasonYear: number
     seasonStart: string // YYYY-MM-DD, first regular-season day

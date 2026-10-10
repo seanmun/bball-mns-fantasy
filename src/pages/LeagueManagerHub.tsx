@@ -95,7 +95,7 @@ export function LeagueManagerHub() {
     ['League settings', `${base}/league`, 'Season, roster, cap, fees, scoring'],
     ['Teams', `${base}/teams`, 'Add teams, invite owners'],
     ['Rosters', `${base}/rosters`, 'Pick a team, search a player, place them'],
-    ['Rookie picks', `${base}/rookie-picks`, 'The rookie draft board'],
+    ['Rookie draft', `${base}/rookie-picks`, 'Record or run the rookie draft'],
     ['Draft setup', `${base}/draft-setup`, 'Pace, readiness, create the draft'],
     ['Message', `${base}/message`, 'Email every owner at once'],
   ]

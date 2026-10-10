@@ -7,7 +7,7 @@ import { lookupRookieKeeperRound } from './rookieKeeperMap.js'
 // no source rule applies and config.keeper.fallbackRound is null — the
 // caller must surface that to the user or importer, not paper over it.
 export function baseKeeperRound(
-  player: Player,
+  player: Pick<Player, 'rookieDraftInfo' | 'keeperPriorYearRound' | 'migratedKeeperRound'>,
   config: LeagueConfig
 ): number | null {
   if (player.rookieDraftInfo) {

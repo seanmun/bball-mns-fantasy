@@ -160,15 +160,15 @@ export function CommissionerChecklist({
             done={doneKeepers}
             title={
               setup.entryPhase === 'keeper_season'
-                ? 'Lock keepers, record rookie picks'
-                : 'Lock keepers, set rookie picks'
+                ? 'Record the rookie draft, then lock keepers'
+                : 'Run the rookie draft, then lock keepers'
             }
             description={
               setup.entryPhase === 'keeper_season'
-                ? 'Record the rookie draft results, then lock the keeper phase once owners submit.'
-                : 'Once owners submit, lock the keeper phase. Assign rookie draft picks.'
+                ? 'Write down this year\'s rookie picks so each rookie is priced by her slot. Lock keepers once owners submit.'
+                : 'The rookie draft runs in-app and prices each rookie by her slot. Lock keepers once owners submit.'
             }
-            cta="Rookie picks"
+            cta="Rookie draft"
             href={`/league/${leagueId}/lm/rookie-picks`}
           />
         )}

@@ -149,6 +149,7 @@ export const nba: SportAdapter = {
     feed: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F'],
     defaultShape: NBA_LEAGUE_PRESET.roster.positionSlots ?? [],
   },
+  rookieClassYear: (seasonYear) => seasonYear - 1,
   calendar: { seasonYear: 2027, seasonStart: '2026-10-20', seasonEnd: '2027-05-02', preseasonStart: '2026-10-03' },
   preset: NBA_LEAGUE_PRESET,
   branding: {

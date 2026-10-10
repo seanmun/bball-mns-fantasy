@@ -7,6 +7,8 @@ import { useLeague } from '../contexts/LeagueContext'
 import type { League } from '../types/league'
 import type { RookieDraftPickRow } from '../types/draft'
 import type { Team } from '../types/team'
+import type { Player } from '../types/player'
+import { sport } from '../lib/sport'
 
 export function AdminRookiePicks() {
   const { user } = useUser()
@@ -16,6 +18,7 @@ export function AdminRookiePicks() {
   const [league, setLeague] = useState<League | null>(null)
   const [teams, setTeams] = useState<Team[]>([])
   const [picks, setPicks] = useState<RookieDraftPickRow[]>([])
+  const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,15 +32,17 @@ export function AdminRookiePicks() {
     const load = async () => {
       try {
         setLoading(true)
-        const [l, t, p] = await Promise.all([
+        const [l, t, p, pl] = await Promise.all([
           apiFetch<League>(`/api/leagues/${leagueId}`),
           apiFetch<Team[]>(`/api/leagues/${leagueId}/teams`),
           apiFetch<RookieDraftPickRow[]>(`/api/leagues/${leagueId}/rookie-picks`),
+          apiFetch<Player[]>(`/api/leagues/${leagueId}/players`),
         ])
         if (cancelled) return
         setLeague(l)
         setTeams(t)
         setPicks(p)
+        setPlayers(pl)
         setError(null)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load')
@@ -82,8 +87,13 @@ export function AdminRookiePicks() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Rookie picks</h1>
-          <p className="text-gray-400 mt-1">{currentLeague.name}</p>
+          <h1 className="text-3xl font-bold">
+            {sport.rookieClassYear(league?.seasonYear ?? currentLeague.seasonYear)} rookie draft
+          </h1>
+          <p className="text-gray-400 mt-1">
+            {currentLeague.name} · the first step of the season. A rookie is priced by her slot
+            here; everyone else by last year's round.
+          </p>
         </div>
         <Link
           to={`/league/${currentLeague.id}`}
@@ -111,7 +121,9 @@ export function AdminRookiePicks() {
           league={league}
           teams={teams}
           picks={picks}
+          players={players}
           onPicksChange={setPicks}
+          onPlayersChange={setPlayers}
         />
       )}
     </div>
@@ -190,16 +202,73 @@ function RookiePickBoard({
   league,
   teams,
   picks,
+  players,
   onPicksChange,
+  onPlayersChange,
 }: {
   league: League
   teams: Team[]
   picks: RookieDraftPickRow[]
+  players: Player[]
   onPicksChange: (p: RookieDraftPickRow[]) => void
+  onPlayersChange: (p: Player[]) => void
 }) {
   const { apiFetch } = useApi()
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
+  // Recording: a draft that already happened is written down pick by
+  // pick, in any order, until the season starts. Live picks happen on
+  // the members' draft page; this board shows them the same way.
+  const canRecord = !league.seasonStartedAt
+  const [openPick, setOpenPick] = useState<string | null>(null)
+
+  const record = async (pick: RookieDraftPickRow, player: Player) => {
+    setSaving(true)
+    try {
+      const r = await apiFetch<{ slot: string; movedFrom: string | null }>(
+        `/api/leagues/${league.id}/rookie-picks`,
+        { method: 'POST', body: JSON.stringify({ action: 'record', pickId: pick.id, playerId: player.id }) }
+      )
+      onPicksChange(
+        picks.map((p) => {
+          if (p.id === pick.id) return { ...p, playerId: player.id, playerName: player.name }
+          // The same player recorded elsewhere on this board leaves that pick.
+          if (p.seasonYear === pick.seasonYear && p.playerId === player.id)
+            return { ...p, playerId: null, playerName: null }
+          return p
+        })
+      )
+      onPlayersChange(
+        players.map((pl) => (pl.id === player.id ? { ...pl, teamId: pick.teamId } : pl))
+      )
+      setOpenPick(null)
+      toast.success(
+        `${player.name} · ${r.slot}${r.movedFrom ? ` — moved from ${r.movedFrom}` : ''}`
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not record that pick')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const clear = async (pick: RookieDraftPickRow) => {
+    setSaving(true)
+    try {
+      await apiFetch(`/api/leagues/${league.id}/rookie-picks`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'clear', pickId: pick.id }),
+      })
+      onPicksChange(
+        picks.map((p) => (p.id === pick.id ? { ...p, playerId: null, playerName: null } : p))
+      )
+      toast.success(`${pick.round}.${pick.pickInRound} cleared`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not clear that pick')
+    } finally {
+      setSaving(false)
+    }
+  }
   const [rounds, setRounds] = useState<number>(
     league.config.draft?.rookieRounds ?? 2
   )
@@ -297,7 +366,7 @@ function RookiePickBoard({
     <section>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">
-          Rookie draft board · {league.seasonYear}
+          Board · {sport.rookieClassYear(league.seasonYear)} class
         </h2>
         {!showBuilder && !anySelected && (
           <button
@@ -307,7 +376,17 @@ function RookiePickBoard({
             Edit order
           </button>
         )}
+        {!showBuilder && anySelected && canRecord && (
+          <span className="text-xs text-gray-500">Clear every pick to change the order.</span>
+        )}
       </div>
+      {!showBuilder && canRecord && (
+        <p className="text-sm text-gray-400 mb-4">
+          Write each pick down: type a name, tap the player. Any order. A pick can be changed
+          or cleared until the season starts, and a player already on another team moves to
+          the team that picked him.
+        </p>
+      )}
 
       {showBuilder ? (
         <div className="bg-mns-card border border-gray-800 rounded-lg p-5">
@@ -406,20 +485,53 @@ function RookiePickBoard({
                     .filter((p) => p.round === round)
                     .map((p) => {
                       const team = teamById.get(p.teamId)
+                      const searching = canRecord && (openPick === p.id || !p.playerId)
                       return (
                         <li
                           key={p.id}
-                          className="flex items-center gap-3 px-4 py-2 text-sm"
+                          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm"
                         >
                           <span className="w-10 text-gray-500 tabular-nums">
                             {p.round}.{p.pickInRound}
                           </span>
-                          <span className="flex-1 font-semibold text-white">
+                          <span className="w-16 font-semibold text-white truncate">
                             {team ? team.abbrev : p.teamId}
                           </span>
-                          <span className="text-gray-400">
-                            {p.playerName ?? '—'}
-                          </span>
+                          {searching ? (
+                            <PickSearch
+                              pick={p}
+                              players={players}
+                              teamById={teamById}
+                              disabled={saving}
+                              onPick={(player) => record(p, player)}
+                              onCancel={p.playerId ? () => setOpenPick(null) : undefined}
+                            />
+                          ) : (
+                            <>
+                              <span className="flex-1 text-gray-200 truncate">
+                                {p.playerName ?? '—'}
+                              </span>
+                              {canRecord && p.playerId && (
+                                <span className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setOpenPick(p.id)}
+                                    disabled={saving}
+                                    className="text-xs text-green-400 hover:text-green-300 min-h-[2.5rem] px-1"
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    onClick={() => clear(p)}
+                                    disabled={saving}
+                                    aria-label={`Clear pick ${p.round}.${p.pickInRound}`}
+                                    className="text-xs text-gray-400 hover:text-white min-h-[2.5rem] px-1"
+                                  >
+                                    Clear
+                                  </button>
+                                </span>
+                              )}
+                            </>
+                          )}
                         </li>
                       )
                     })}
@@ -429,6 +541,91 @@ function RookiePickBoard({
         </div>
       )}
     </section>
+  )
+}
+
+// One pick's search: type a name, tap the player. Rookies and free
+// agents rank first; a player on a team shows whose, since recording
+// moves him.
+function PickSearch({
+  pick,
+  players,
+  teamById,
+  disabled,
+  onPick,
+  onCancel,
+}: {
+  pick: RookieDraftPickRow
+  players: Player[]
+  teamById: Map<string, Team>
+  disabled: boolean
+  onPick: (p: Player) => void
+  onCancel?: () => void
+}) {
+  const [q, setQ] = useState('')
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (needle.length < 2) return []
+    const rank = (p: Player) => {
+      const n = p.name.toLowerCase()
+      if (n.startsWith(needle)) return 0
+      if (n.split(' ').some((w) => w.startsWith(needle))) return 1
+      return n.includes(needle) ? 2 : 9
+    }
+    return players
+      .filter((p) => rank(p) < 9)
+      .sort(
+        (x, y) =>
+          rank(x) - rank(y) ||
+          Number(!!x.teamId) - Number(!!y.teamId) ||
+          Number(!x.isRookie) - Number(!y.isRookie) ||
+          x.name.localeCompare(y.name)
+      )
+      .slice(0, 8)
+  }, [q, players])
+
+  return (
+    <>
+      <span className="flex-1 min-w-[12rem] flex items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={pick.playerName ? `Replace ${pick.playerName}` : 'Type a name'}
+          aria-label={`Player for pick ${pick.round}.${pick.pickInRound}`}
+          disabled={disabled}
+          className="flex-1 min-h-[2.5rem] px-3 py-1 text-sm bg-mns-dark border border-gray-700 rounded text-white placeholder:text-gray-500"
+        />
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="text-xs text-gray-400 hover:text-white min-h-[2.5rem] px-1"
+          >
+            Cancel
+          </button>
+        )}
+      </span>
+      {matches.length > 0 && (
+        <ul className="basis-full mt-1 bg-mns-dark border border-gray-700 rounded-lg overflow-hidden">
+          {matches.map((m) => {
+            const on = m.teamId ? teamById.get(m.teamId) : null
+            return (
+              <li key={m.id}>
+                <button
+                  onClick={() => onPick(m)}
+                  disabled={disabled}
+                  className="w-full text-left px-3 py-2 min-h-[2.5rem] hover:bg-mns-hover flex items-center gap-2"
+                >
+                  <span className="flex-1 font-semibold text-white truncate">{m.name}</span>
+                  <span className="text-xs text-gray-400 tabular-nums">
+                    {[m.position, m.teamCode, on ? on.abbrev : 'FA'].filter(Boolean).join(' · ')}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </>
   )
 }
 

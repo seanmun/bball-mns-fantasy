@@ -9,6 +9,9 @@ import {
   mnsTeams,
 } from '../../../src/lib/db/schema.js'
 import { leaguePlayers } from '../../../src/lib/players/leaguePlayers.js'
+import { writeDraftRounds } from '../../../src/lib/players/carry.js'
+import { baseKeeperRound, stackKeeperRounds } from '../../../src/rules/keeperRules.js'
+import type { RosterEntry } from '../../../src/types/roster.js'
 import { logger } from '../../_logger.js'
 import type { LeagueConfig } from '../../../src/types/leagueConfig.js'
 
@@ -85,6 +88,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (league.leaguePhase !== 'keeper_season') {
         return res.status(400).json({ error: 'Keepers lock during the keeper phase.' })
       }
+      // Each keeper's occupied round — her stacked round on her team's
+      // board — is written down now, so the turn of the year prices
+      // next season from it and nobody types rounds again.
+      const kept = await leaguePlayers(db).where(
+        and(eq(mnsPlayers.leagueId, leagueId), eq(mnsPlayers.isKeeper, true))
+      )
+      const byTeam = new Map<string, typeof kept>()
+      for (const p of kept) {
+        if (!p.teamId) continue
+        const list = byTeam.get(p.teamId) ?? []
+        list.push(p)
+        byTeam.set(p.teamId, list)
+      }
+      const occupied: Array<{ id: string; draftRound: number }> = []
+      for (const roster of byTeam.values()) {
+        const entries: RosterEntry[] = roster.map((p) => ({
+          playerId: p.id,
+          decision: 'KEEP',
+          baseRound: baseKeeperRound(p, config) ?? undefined,
+        }))
+        for (const e of stackKeeperRounds(entries, config).entries) {
+          if (e.keeperRound) occupied.push({ id: e.playerId, draftRound: e.keeperRound })
+        }
+      }
+      await writeDraftRounds(db, leagueId, occupied)
       const released = await db
         .update(mnsPlayers)
         .set({

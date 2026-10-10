@@ -11,6 +11,7 @@ import { leagueStatLines } from '../../../../src/lib/players/statLines.js'
 import { leaguePlayers } from '../../../../src/lib/players/leaguePlayers.js'
 import { updatePlayerSchema, parseBody } from '../../../_validation.js'
 import { logger } from '../../../_logger.js'
+import { slotForLastYearRedshirt } from '../../../../src/rules/rookieSlots.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = await verifyAuth(req)
@@ -120,6 +121,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (parsed.data.keeperPriorYearRound !== undefined)
     updates.keeperPriorYearRound = parsed.data.keeperPriorYearRound
+  if (parsed.data.rookieDraftInfo !== undefined) {
+    const s = parsed.data.rookieDraftInfo
+    updates.rookieDraftInfo = s ? slotForLastYearRedshirt(s.round, s.pick) : null
+  }
   if (parsed.data.migratedKeeperRound !== undefined)
     updates.migratedKeeperRound = parsed.data.migratedKeeperRound
   if (parsed.data.isRookie !== undefined) updates.isRookie = parsed.data.isRookie

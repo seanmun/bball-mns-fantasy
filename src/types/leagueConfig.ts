@@ -7,6 +7,9 @@ export type RosterSource = 'fresh' | 'import'
 export interface LeagueSetup {
   entryPhase: EntryPhase
   rosterSource: RosterSource
+  // The commissioner has saved League settings at least once: the
+  // Settings stage of the checklist is done.
+  settingsSaved?: boolean
 }
 export type ScoringModeId = 'matchup_record' | 'category_record'
 export type DraftType = 'snake' | 'auction'

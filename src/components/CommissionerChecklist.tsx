@@ -8,10 +8,15 @@ import type { LeagueSetup } from '../types/leagueConfig'
 
 interface SetupStatus {
   teamsCount: number
+  teamsWithOwners: number
+  settingsSaved: boolean
   playersPoolCount: number
   playersAssignedCount: number
+  playersUnpricedCount: number
+  rookiePicksTotal: number
+  rookiePicksMade: number
+  keepersDeclaredTeams: number
   keepersLocked: boolean
-  rookiePicksCount: number
   draftStatus: string | null
   seasonStarted: boolean
 }
@@ -92,16 +97,27 @@ export function CommissionerChecklist({
     )
   }
 
-  const showAssign = setup.rosterSource === 'import'
+  // Which stages this league passes through, in the order the season
+  // runs: teams → settings → rosters → rookie draft → keepers → veteran
+  // draft → start. A stage a scenario skips is simply not shown.
+  const keeperLeague = (league.config.roster?.maxKeepers ?? 0) > 0
+  const showRosters = setup.rosterSource === 'import'
+  const showRookie =
+    (setup.entryPhase === 'rookie_draft' || setup.entryPhase === 'keeper_season') &&
+    league.config.draft?.rookieDraftEnabled !== false
   const showKeepers =
-    setup.entryPhase === 'rookie_draft' || setup.entryPhase === 'keeper_season'
+    (setup.entryPhase === 'rookie_draft' || setup.entryPhase === 'keeper_season') && keeperLeague
   const showDraft = setup.entryPhase !== 'regular_season'
-
-  const doneTeams = (status?.teamsCount ?? 0) > 0
-  const doneAssign = (status?.playersAssignedCount ?? 0) > 0
-  const doneKeepers = !!status?.keepersLocked && (status?.rookiePicksCount ?? 0) > 0
-  const doneDraft = !!status?.draftStatus && status.draftStatus !== 'setup'
   const seasonStarted = !!status?.seasonStarted
+
+  const teams = status?.teamsCount ?? 0
+  const owners = status?.teamsWithOwners ?? 0
+  const assigned = status?.playersAssignedCount ?? 0
+  const unpriced = status?.playersUnpricedCount ?? 0
+  const picksTotal = status?.rookiePicksTotal ?? 0
+  const picksMade = status?.rookiePicksMade ?? 0
+  const declared = status?.keepersDeclaredTeams ?? 0
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
   let n = 0
   const num = () => ++n
@@ -110,11 +126,6 @@ export function CommissionerChecklist({
     <section className="mb-10">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Commissioner setup</h2>
-        {!seasonStarted ? (
-          <button onClick={() => setChanging(true)} className="text-sm text-gray-400 hover:text-white">
-            Change starting point
-          </button>
-        ) : null}
         <Link to={`/league/${leagueId}/lm`} className="text-sm text-green-400 hover:text-green-300">
           Commissioner tools →
         </Link>
@@ -122,65 +133,91 @@ export function CommissionerChecklist({
       <div className="bg-mns-card border border-gray-800 rounded-lg divide-y divide-gray-800">
         <StaticStep
           n={num()}
-          done={doneTeams}
-          title="Add teams"
+          done={teams >= 2 && owners === teams}
+          title="Teams"
           description={
-            doneTeams
-              ? `${status?.teamsCount} team${status?.teamsCount === 1 ? '' : 's'} in this league.`
-              : 'Create 4-12 teams and invite owners by email.'
+            teams === 0
+              ? 'Add the teams. Owner emails can wait; invites go out when you send them.'
+              : `${plural(teams, 'team')} · ${owners} of ${teams} with an owner.`
           }
-          cta={doneTeams ? 'Manage teams' : 'Add teams'}
+          cta={teams === 0 ? 'Add teams' : 'Teams'}
           href={`/league/${leagueId}/lm/teams`}
         />
         <StaticStep
           n={num()}
-          done={false}
-          title="League settings"
-          description={`Override cap, fees, schedule, scoring — anything from the ${sport.leagueLabel} preset.`}
-          cta="League settings"
+          done={!!status?.settingsSaved}
+          title="Settings"
+          description={
+            status?.settingsSaved
+              ? 'Cap, fees, schedule and scoring decided. Change them any time before the season.'
+              : `Decide the cap ladder, fees, schedule and scoring, or keep the ${sport.leagueLabel} preset and save.`
+          }
+          cta="Settings"
           href={`/league/${leagueId}/lm/league`}
         />
-        {showAssign && (
+        {showRosters && (
           <StaticStep
             n={num()}
-            done={doneAssign}
-            title="Assign players to teams"
+            done={assigned > 0 && (!keeperLeague || unpriced === 0)}
+            title="Rosters"
             description={
-              doneAssign
-                ? `${status?.playersAssignedCount} player${status?.playersAssignedCount === 1 ? '' : 's'} assigned to teams.`
-                : 'Search players from the pool, pick their team, set their prior keeper round.'
+              assigned === 0
+                ? 'Pick a team, search a player, place them. Last year\'s round goes in the Rd box.'
+                : keeperLeague
+                  ? `${plural(assigned, 'player')} placed · ${
+                      unpriced === 0 ? 'every one priced.' : `${unpriced} without a round.`
+                    }`
+                  : `${plural(assigned, 'player')} placed.`
             }
-            cta="Manage rosters"
+            cta="Rosters"
             href={`/league/${leagueId}/lm/rosters`}
           />
         )}
-        {showKeepers && (
+        {showRookie && (
           <StaticStep
             n={num()}
-            done={doneKeepers}
-            title={
-              setup.entryPhase === 'keeper_season'
-                ? 'Record the rookie draft, then lock keepers'
-                : 'Run the rookie draft, then lock keepers'
-            }
+            done={picksTotal > 0 && picksMade === picksTotal}
+            title="Rookie draft"
             description={
-              setup.entryPhase === 'keeper_season'
-                ? 'Write down this year\'s rookie picks so each rookie is priced by her slot. Lock keepers once owners submit.'
-                : 'The rookie draft runs in-app and prices each rookie by her slot. Lock keepers once owners submit.'
+              picksTotal === 0
+                ? setup.entryPhase === 'keeper_season'
+                  ? 'Write down who picked whom. Each rookie is priced by that slot.'
+                  : 'Run the rookie draft here. Each rookie is priced by their slot.'
+                : `${picksMade} of ${picksTotal} picks ${
+                    setup.entryPhase === 'keeper_season' ? 'recorded' : 'made'
+                  }.`
             }
             cta="Rookie draft"
             href={`/league/${leagueId}/lm/rookie-picks`}
           />
         )}
+        {showKeepers && (
+          <StaticStep
+            n={num()}
+            done={!!status?.keepersLocked}
+            title="Keepers"
+            description={
+              status?.keepersLocked
+                ? 'Locked. Keepers stay; everyone else is back in the pool.'
+                : `${declared} of ${teams} teams submitted. Lock when all are in.`
+            }
+            cta="Keepers"
+            href={`/league/${leagueId}/keepers`}
+          />
+        )}
         {showDraft && (
           <StaticStep
             n={num()}
-            done={doneDraft}
-            title="Set up the draft"
+            done={!!status?.draftStatus && status.draftStatus !== 'setup'}
+            title="Veteran draft"
             description={
-              doneDraft
-                ? `Draft status: ${status?.draftStatus}.`
-                : 'Configure draft order, slot keeper picks into rounds, start the draft.'
+              !status?.draftStatus
+                ? 'Create the draft room, then start it when everyone is in.'
+                : status.draftStatus === 'setup'
+                  ? 'Room created. Start it when everyone is in.'
+                  : status.draftStatus === 'completed'
+                    ? 'Drafted.'
+                    : 'Drafting now.'
             }
             cta="Draft setup"
             href={`/league/${leagueId}/lm/draft-setup`}
@@ -191,14 +228,19 @@ export function CommissionerChecklist({
           n={num()}
           done={seasonStarted}
           onStarted={() => {
-            onSeasonStarted()
             void refresh()
+            onSeasonStarted()
           }}
         />
       </div>
-      <p className="mt-3 text-xs text-gray-500">
-        League ID: <code className="text-gray-400">{leagueId}</code>
-      </p>
+      {!seasonStarted ? (
+        <button
+          onClick={() => setChanging(true)}
+          className="mt-3 text-xs text-gray-500 hover:text-gray-300"
+        >
+          Change starting point
+        </button>
+      ) : null}
     </section>
   )
 }
@@ -223,10 +265,13 @@ function ScenarioSelector({
       await apiFetch(`/api/leagues/${league.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          config: { ...league.config, setup: scenario.setup },
+          config: {
+            ...league.config,
+            setup: { ...scenario.setup, settingsSaved: current?.settingsSaved },
+          },
         }),
       })
-      onSaved(scenario.setup)
+      onSaved({ ...scenario.setup, settingsSaved: current?.settingsSaved })
       toast.success(`Starting point set: ${scenario.label}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to save')
